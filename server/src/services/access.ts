@@ -176,7 +176,7 @@ export function accessService(db: Db) {
           principalType: "user",
           principalId: userId,
           status: "active",
-          membershipRole: "member",
+          membershipRole: "contributor",
         });
       }
     });
@@ -188,8 +188,8 @@ export function accessService(db: Db) {
     companyId: string,
     principalType: PrincipalType,
     principalId: string,
-    membershipRole: string | null = "member",
-    status: "pending" | "active" | "suspended" = "active",
+    membershipRole: string | null = "contributor",
+    status: "active" | "suspended" = "active",
   ) {
     const existing = await getMembership(companyId, principalType, principalId);
     if (existing) {
