@@ -74,7 +74,7 @@ This wish finishes the entire permissions feature set end-to-end — from role p
 - [x] 2. Existing company owners backfilled with Owner permissions (migration)
 - [x] 3. Human invite link generated from Company Settings with role preset picker
 - [x] 4. Invite expires after 24hrs, single-use, revocable
-- [ ] 5. Collaborator accepts invite → gets membership + preset permissions → sees company immediately
+- [x] 5. Collaborator accepts invite → gets membership + preset permissions → sees company immediately
 - [x] 6. Members section lists all members with role and permissions
 - [x] 7. Member permissions editable with role hierarchy enforcement
 - [x] 8. Members can be removed (deletes membership + grants)
