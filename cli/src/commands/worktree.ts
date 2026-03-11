@@ -62,7 +62,9 @@ type WorktreeInitOptions = {
   force?: boolean;
 };
 
-type WorktreeMakeOptions = WorktreeInitOptions;
+type WorktreeMakeOptions = WorktreeInitOptions & {
+  startPoint?: string;
+};
 
 type WorktreeEnvOptions = {
   config?: string;
@@ -166,11 +168,13 @@ export function resolveGitWorktreeAddArgs(input: {
   branchName: string;
   targetPath: string;
   branchExists: boolean;
+  startPoint?: string;
 }): string[] {
-  if (input.branchExists) {
+  if (input.branchExists && !input.startPoint) {
     return ["worktree", "add", input.targetPath, input.branchName];
   }
-  return ["worktree", "add", "-b", input.branchName, input.targetPath, "HEAD"];
+  const commitish = input.startPoint ?? "HEAD";
+  return ["worktree", "add", "-b", input.branchName, input.targetPath, commitish];
 }
 
 function readPidFilePort(postmasterPidFile: string): number | null {
@@ -715,10 +719,25 @@ export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOpt
   }
 
   mkdirSync(path.dirname(targetPath), { recursive: true });
+  if (opts.startPoint) {
+    const [remote] = opts.startPoint.split("/", 1);
+    try {
+      execFileSync("git", ["fetch", remote], {
+        cwd: sourceCwd,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch from remote "${remote}": ${extractExecSyncErrorMessage(error) ?? String(error)}`,
+      );
+    }
+  }
+
   const worktreeArgs = resolveGitWorktreeAddArgs({
     branchName: name,
     targetPath,
-    branchExists: localBranchExists(sourceCwd, name),
+    branchExists: !opts.startPoint && localBranchExists(sourceCwd, name),
+    startPoint: opts.startPoint,
   });
 
   const spinner = p.spinner();
@@ -732,6 +751,19 @@ export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOpt
   } catch (error) {
     spinner.stop(pc.red("Failed to create git worktree."));
     throw new Error(extractExecSyncErrorMessage(error) ?? String(error));
+  }
+
+  const installSpinner = p.spinner();
+  installSpinner.start("Installing dependencies...");
+  try {
+    execFileSync("pnpm", ["install"], {
+      cwd: targetPath,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    installSpinner.stop("Installed dependencies.");
+  } catch (error) {
+    installSpinner.stop(pc.yellow("Failed to install dependencies (continuing anyway)."));
+    p.log.warning(extractExecSyncErrorMessage(error) ?? String(error));
   }
 
   const originalCwd = process.cwd();
@@ -775,6 +807,7 @@ export function registerWorktreeCommands(program: Command): void {
     .command("worktree:make")
     .description("Create ~/NAME as a git worktree, then initialize an isolated Paperclip instance inside it")
     .argument("<name>", "Worktree directory and branch name (created at ~/NAME)")
+    .option("--start-point <ref>", "Remote ref to base the new branch on (e.g. origin/main)")
     .option("--instance <id>", "Explicit isolated instance id")
     .option("--home <path>", `Home root for worktree instances (default: ${DEFAULT_WORKTREE_HOME})`)
     .option("--from-config <path>", "Source config.json to seed from")

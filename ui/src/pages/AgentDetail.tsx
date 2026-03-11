@@ -311,7 +311,12 @@ export function AgentDetail() {
       }
       return;
     }
-    const canonicalTab = activeView === "configuration" ? "configuration" : "dashboard";
+    const canonicalTab =
+      activeView === "configuration"
+        ? "configuration"
+        : activeView === "runs"
+          ? "runs"
+          : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
       return;
@@ -437,7 +442,7 @@ export function AgentDetail() {
     return <Navigate to={`/agents/${canonicalAgentRef}/dashboard`} replace />;
   }
   const isPendingApproval = agent.status === "pending_approval";
-  const showConfigActionBar = activeView === "configuration" && configDirty;
+  const showConfigActionBar = activeView === "configuration" && (configDirty || configSaving);
 
   return (
     <div className={cn("space-y-6", isMobile && showConfigActionBar && "pb-24")}>
@@ -506,7 +511,7 @@ export function AgentDetail() {
               className="sm:hidden flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-colors no-underline"
             >
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
               </span>
               <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">Live</span>
@@ -558,15 +563,16 @@ export function AgentDetail() {
 
       {!urlRunId && (
         <Tabs
-          value={activeView === "configuration" ? "configuration" : "dashboard"}
+          value={activeView}
           onValueChange={(value) => navigate(`/agents/${canonicalAgentRef}/${value}`)}
         >
           <PageTabBar
             items={[
               { value: "dashboard", label: "Dashboard" },
               { value: "configuration", label: "Configuration" },
+              { value: "runs", label: "Runs" },
             ]}
-            value={activeView === "configuration" ? "configuration" : "dashboard"}
+            value={activeView}
             onValueChange={(value) => navigate(`/agents/${canonicalAgentRef}/${value}`)}
           />
         </Tabs>
@@ -707,7 +713,7 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
         <h3 className="flex items-center gap-2 text-sm font-medium">
           {isLive && (
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
             </span>
           )}
@@ -851,7 +857,7 @@ function CostsSection({
     <div className="space-y-4">
       {runtimeState && (
         <div className="border border-border rounded-lg p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 tabular-nums">
             <div>
               <span className="text-xs text-muted-foreground block">Input tokens</span>
               <span className="text-lg font-semibold">{formatTokens(runtimeState.totalInputTokens)}</span>
@@ -890,9 +896,9 @@ function CostsSection({
                   <tr key={run.id} className="border-b border-border last:border-b-0">
                     <td className="px-3 py-2">{formatDate(run.createdAt)}</td>
                     <td className="px-3 py-2 font-mono">{run.id.slice(0, 8)}</td>
-                    <td className="px-3 py-2 text-right">{formatTokens(Number(u.input_tokens ?? 0))}</td>
-                    <td className="px-3 py-2 text-right">{formatTokens(Number(u.output_tokens ?? 0))}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-right tabular-nums">{formatTokens(Number(u.input_tokens ?? 0))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatTokens(Number(u.output_tokens ?? 0))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
                       {(u.cost_usd || u.total_cost_usd)
                         ? `$${Number(u.cost_usd ?? u.total_cost_usd ?? 0).toFixed(4)}`
                         : "-"
@@ -1037,6 +1043,8 @@ function ConfigurationTab({
   updatePermissions: { mutate: (canCreate: boolean) => void; isPending: boolean };
 }) {
   const queryClient = useQueryClient();
+  const [awaitingRefreshAfterSave, setAwaitingRefreshAfterSave] = useState(false);
+  const lastAgentRef = useRef(agent);
 
   const { data: adapterModels } = useQuery({
     queryKey:
@@ -1049,16 +1057,31 @@ function ConfigurationTab({
 
   const updateAgent = useMutation({
     mutationFn: (data: Record<string, unknown>) => agentsApi.update(agent.id, data, companyId),
+    onMutate: () => {
+      setAwaitingRefreshAfterSave(true);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
     },
+    onError: () => {
+      setAwaitingRefreshAfterSave(false);
+    },
   });
 
   useEffect(() => {
-    onSavingChange(updateAgent.isPending);
-  }, [onSavingChange, updateAgent.isPending]);
+    if (awaitingRefreshAfterSave && agent !== lastAgentRef.current) {
+      setAwaitingRefreshAfterSave(false);
+    }
+    lastAgentRef.current = agent;
+  }, [agent, awaitingRefreshAfterSave]);
+
+  const isConfigSaving = updateAgent.isPending || awaitingRefreshAfterSave;
+
+  useEffect(() => {
+    onSavingChange(isConfigSaving);
+  }, [onSavingChange, isConfigSaving]);
 
   return (
     <div className="space-y-6">
@@ -1066,7 +1089,7 @@ function ConfigurationTab({
         mode="edit"
         agent={agent}
         onSave={(patch) => updateAgent.mutate(patch)}
-        isSaving={updateAgent.isPending}
+        isSaving={isConfigSaving}
         adapterModels={adapterModels}
         onDirtyChange={onDirtyChange}
         onSaveActionChange={onSaveActionChange}
@@ -1140,7 +1163,7 @@ function RunListItem({ run, isSelected, agentId }: { run: HeartbeatRun; isSelect
         </span>
       )}
       {(metrics.totalTokens > 0 || metrics.cost > 0) && (
-        <div className="flex items-center gap-2 pl-5.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-2 pl-5.5 text-[11px] text-muted-foreground tabular-nums">
           {metrics.totalTokens > 0 && <span>{formatTokens(metrics.totalTokens)} tok</span>}
           {metrics.cost > 0 && <span>${metrics.cost.toFixed(3)}</span>}
         </div>
@@ -1231,9 +1254,15 @@ function RunsTab({
 
 /* ---- Run Detail (expanded) ---- */
 
-function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agentRouteId: string; adapterType: string }) {
+function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: HeartbeatRun; agentRouteId: string; adapterType: string }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { data: hydratedRun } = useQuery({
+    queryKey: queryKeys.runDetail(initialRun.id),
+    queryFn: () => heartbeatsApi.get(initialRun.id),
+    enabled: Boolean(initialRun.id),
+  });
+  const run = hydratedRun ?? initialRun;
   const metrics = runMetrics(run);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [claudeLoginResult, setClaudeLoginResult] = useState<ClaudeLoginResult | null>(null);
@@ -1510,7 +1539,7 @@ function RunDetail({ run, agentRouteId, adapterType }: { run: HeartbeatRun; agen
 
           {/* Right column: metrics */}
           {hasMetrics && (
-            <div className="border-t sm:border-t-0 sm:border-l border-border p-4 grid grid-cols-2 gap-x-4 sm:gap-x-8 gap-y-3 content-center">
+            <div className="border-t sm:border-t-0 sm:border-l border-border p-4 grid grid-cols-2 gap-x-4 sm:gap-x-8 gap-y-3 content-center tabular-nums">
               <div>
                 <div className="text-xs text-muted-foreground">Input</div>
                 <div className="text-sm font-medium font-mono">{formatTokens(metrics.input)}</div>
@@ -2109,7 +2138,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           {isLive && (
             <span className="flex items-center gap-1 text-xs text-cyan-400">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
               </span>
               Live

@@ -142,6 +142,7 @@ interface IssuesListProps {
   liveIssueIds?: Set<string>;
   projectId?: string;
   viewStateKey: string;
+  issueLinkState?: unknown;
   initialAssignees?: string[];
   initialSearch?: string;
   onSearchChange?: (search: string) => void;
@@ -156,6 +157,7 @@ export function IssuesList({
   liveIssueIds,
   projectId,
   viewStateKey,
+  issueLinkState,
   initialAssignees,
   initialSearch,
   onSearchChange,
@@ -591,6 +593,7 @@ export function IssuesList({
                 <Link
                   key={issue.id}
                   to={`/issues/${issue.identifier ?? issue.id}`}
+                  state={issueLinkState}
                   className="flex items-start gap-2 py-2.5 pl-2 pr-3 text-sm border-b border-border last:border-b-0 cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit sm:items-center sm:py-2 sm:pl-1"
                 >
                   {/* Status icon - left column on mobile, inline on desktop */}
@@ -625,7 +628,7 @@ export function IssuesList({
                       {liveIssueIds?.has(issue.id) && (
                         <span className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-500/10">
                           <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
                           </span>
                           <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hidden sm:inline">Live</span>

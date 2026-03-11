@@ -1411,23 +1411,5 @@ export function issueService(db: Db) {
         goal: a.goalId ? goalMap.get(a.goalId) ?? null : null,
       }));
     },
-
-    staleCount: async (companyId: string, minutes = 60) => {
-      const cutoff = new Date(Date.now() - minutes * 60 * 1000);
-      const result = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(issues)
-        .where(
-          and(
-            eq(issues.companyId, companyId),
-            eq(issues.status, "in_progress"),
-            isNull(issues.hiddenAt),
-            sql`${issues.startedAt} < ${cutoff.toISOString()}`,
-          ),
-        )
-        .then((rows) => rows[0]);
-
-      return Number(result?.count ?? 0);
-    },
   };
 }
