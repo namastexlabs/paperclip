@@ -25,7 +25,8 @@ import {
   listJoinRequestsQuerySchema,
   updateMemberPermissionsSchema,
   updateUserCompanyAccessSchema,
-  PERMISSION_KEYS
+  PERMISSION_KEYS,
+  HUMAN_INVITE_TTL_MS
 } from "@paperclipai/shared";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import {
@@ -73,8 +74,8 @@ function createClaimSecret() {
   return `pcp_claim_${randomBytes(24).toString("hex")}`;
 }
 
-export function companyInviteExpiresAt(nowMs: number = Date.now()) {
-  return new Date(nowMs + COMPANY_INVITE_TTL_MS);
+export function companyInviteExpiresAt(nowMs: number = Date.now(), ttlMs: number = COMPANY_INVITE_TTL_MS) {
+  return new Date(nowMs + ttlMs);
 }
 
 function tokenHashesMatch(left: string, right: string) {
@@ -1573,7 +1574,10 @@ export function accessRoutes(
         input.defaultsPayload ?? null,
         normalizedAgentMessage
       ),
-      expiresAt: companyInviteExpiresAt(),
+      expiresAt: companyInviteExpiresAt(
+        Date.now(),
+        input.allowedJoinTypes === "human" ? HUMAN_INVITE_TTL_MS : COMPANY_INVITE_TTL_MS,
+      ),
       invitedByUserId: input.req.actor.userId ?? null
     };
 
@@ -2547,6 +2551,19 @@ export function accessRoutes(
       const companyId = req.params.companyId as string;
       const memberId = req.params.memberId as string;
       await assertCompanyPermission(req, companyId, "users:manage_permissions");
+
+      const actorMembership = req.actor.userId
+        ? await access.getMembership(companyId, "user", req.actor.userId)
+        : null;
+      const targetMembers = await access.listMembers(companyId);
+      const targetMember = targetMembers.find((m) => m.id === memberId);
+      if (!targetMember) throw notFound("Member not found");
+
+      const isAdmin = req.actor.userId ? await access.isInstanceAdmin(req.actor.userId) : false;
+      if (!isAdmin && !access.canModifyMember(actorMembership?.membershipRole ?? null, targetMember.membershipRole)) {
+        throw forbidden("Cannot modify member with equal or higher role");
+      }
+
       const updated = await access.setMemberPermissions(
         companyId,
         memberId,
@@ -2557,6 +2574,72 @@ export function accessRoutes(
       res.json(updated);
     }
   );
+
+  router.delete("/companies/:companyId/members/:memberId", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const memberId = req.params.memberId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+
+    const actorMembership = req.actor.userId
+      ? await access.getMembership(companyId, "user", req.actor.userId)
+      : null;
+    const targetMembers = await access.listMembers(companyId);
+    const targetMember = targetMembers.find((m) => m.id === memberId);
+    if (!targetMember) throw notFound("Member not found");
+
+    const isAdmin = req.actor.userId ? await access.isInstanceAdmin(req.actor.userId) : false;
+    if (!isAdmin && !access.canModifyMember(actorMembership?.membershipRole ?? null, targetMember.membershipRole)) {
+      throw forbidden("Cannot remove member with equal or higher role");
+    }
+
+    const removed = await access.removeMember(companyId, memberId, req.actor.userId ?? "system");
+    if (!removed) throw notFound("Member not found");
+    res.status(204).send();
+  });
+
+  router.post("/companies/:companyId/members/:memberId/suspend", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const memberId = req.params.memberId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+
+    const actorMembership = req.actor.userId
+      ? await access.getMembership(companyId, "user", req.actor.userId)
+      : null;
+    const targetMembers = await access.listMembers(companyId);
+    const targetMember = targetMembers.find((m) => m.id === memberId);
+    if (!targetMember) throw notFound("Member not found");
+
+    const isAdmin = req.actor.userId ? await access.isInstanceAdmin(req.actor.userId) : false;
+    if (!isAdmin && !access.canModifyMember(actorMembership?.membershipRole ?? null, targetMember.membershipRole)) {
+      throw forbidden("Cannot suspend member with equal or higher role");
+    }
+
+    const suspended = await access.suspendMember(companyId, memberId, req.actor.userId ?? "system");
+    if (!suspended) throw notFound("Member not found");
+    res.json(suspended);
+  });
+
+  router.post("/companies/:companyId/members/:memberId/unsuspend", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const memberId = req.params.memberId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+
+    const actorMembership = req.actor.userId
+      ? await access.getMembership(companyId, "user", req.actor.userId)
+      : null;
+    const targetMembers = await access.listMembers(companyId);
+    const targetMember = targetMembers.find((m) => m.id === memberId);
+    if (!targetMember) throw notFound("Member not found");
+
+    const isAdmin = req.actor.userId ? await access.isInstanceAdmin(req.actor.userId) : false;
+    if (!isAdmin && !access.canModifyMember(actorMembership?.membershipRole ?? null, targetMember.membershipRole)) {
+      throw forbidden("Cannot unsuspend member with equal or higher role");
+    }
+
+    const unsuspended = await access.unsuspendMember(companyId, memberId, req.actor.userId ?? "system");
+    if (!unsuspended) throw notFound("Member not found");
+    res.json(unsuspended);
+  });
 
   router.post(
     "/admin/users/:userId/promote-instance-admin",

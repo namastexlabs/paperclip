@@ -158,6 +158,13 @@ export function companyRoutes(db: Db) {
     assertBoard(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    if (req.actor.userId) {
+      const membership = await access.getMembership(companyId, "user", req.actor.userId);
+      if (!membership || membership.membershipRole !== "owner") {
+        const isAdmin = await access.isInstanceAdmin(req.actor.userId);
+        if (!isAdmin) throw forbidden("Only owners can archive companies");
+      }
+    }
     const company = await svc.archive(companyId);
     if (!company) {
       res.status(404).json({ error: "Company not found" });
@@ -178,6 +185,13 @@ export function companyRoutes(db: Db) {
     assertBoard(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    if (req.actor.userId) {
+      const membership = await access.getMembership(companyId, "user", req.actor.userId);
+      if (!membership || membership.membershipRole !== "owner") {
+        const isAdmin = await access.isInstanceAdmin(req.actor.userId);
+        if (!isAdmin) throw forbidden("Only owners can delete companies");
+      }
+    }
     const company = await svc.remove(companyId);
     if (!company) {
       res.status(404).json({ error: "Company not found" });
