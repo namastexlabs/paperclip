@@ -2302,6 +2302,23 @@ export function accessRoutes(
           ? rolePreset
           : "contributor";
 
+        // Enforce hierarchy: approver cannot grant a role equal or higher than their own
+        const actorMembership = req.actor.userId
+          ? await access.getMembership(companyId, "user", req.actor.userId)
+          : null;
+        const isAdmin = req.actor.userId
+          ? await access.isInstanceAdmin(req.actor.userId)
+          : false;
+        if (
+          !isAdmin &&
+          !access.canModifyMember(
+            actorMembership?.membershipRole ?? null,
+            membershipRole,
+          )
+        ) {
+          throw forbidden("Cannot approve invite granting equal or higher role");
+        }
+
         await access.ensureMembership(
           companyId,
           "user",
