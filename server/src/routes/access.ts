@@ -2303,9 +2303,11 @@ export function accessRoutes(
           : "contributor";
 
         // Enforce hierarchy: approver cannot grant a role equal or higher than their own
-        const actorMembership = req.actor.userId
-          ? await access.getMembership(companyId, "user", req.actor.userId)
-          : null;
+        const actorMembership = req.actor.type === "agent" && req.actor.agentId
+          ? await access.getMembership(companyId, "agent", req.actor.agentId)
+          : req.actor.userId
+            ? await access.getMembership(companyId, "user", req.actor.userId)
+            : null;
         const isAdmin = req.actor.userId
           ? await access.isInstanceAdmin(req.actor.userId)
           : false;
@@ -2376,11 +2378,19 @@ export function accessRoutes(
           metadata: null
         });
         createdAgentId = created.id;
+        // Use canonical role from invite defaults (defaulting to "contributor")
+        const agentDefaults = invite.defaultsPayload as Record<string, unknown> | null;
+        const agentRolePreset = agentDefaults?.rolePreset as string | undefined;
+        const agentValidRoles = ["owner", "admin", "contributor", "viewer"] as const;
+        const agentMembershipRole = agentRolePreset && (agentValidRoles as readonly string[]).includes(agentRolePreset)
+          ? agentRolePreset
+          : "contributor";
+
         await access.ensureMembership(
           companyId,
           "agent",
           created.id,
-          "member",
+          agentMembershipRole,
           "active"
         );
         const grants = grantsFromDefaults(
