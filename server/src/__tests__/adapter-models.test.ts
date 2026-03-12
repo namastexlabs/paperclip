@@ -6,6 +6,11 @@ import { listAdapterModels } from "../adapters/index.js";
 import { resetCodexModelsCacheForTests } from "../adapters/codex-models.js";
 import { resetCursorModelsCacheForTests, setCursorModelsRunnerForTests } from "../adapters/cursor-models.js";
 
+// Prevent config file on disk from injecting an API key into tests
+vi.mock("../config-file.js", () => ({
+  readConfigFile: () => null,
+}));
+
 describe("adapter model listing", () => {
   beforeEach(() => {
     delete process.env.OPENAI_API_KEY;
