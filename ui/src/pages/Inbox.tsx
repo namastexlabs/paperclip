@@ -267,6 +267,10 @@ export function Inbox() {
   });
 
   useEffect(() => {
+    setApprovedRequests(new Map());
+  }, [selectedCompanyId]);
+
+  useEffect(() => {
     setBreadcrumbs([{ label: "Inbox" }]);
   }, [setBreadcrumbs]);
 

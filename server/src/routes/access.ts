@@ -2386,6 +2386,25 @@ export function accessRoutes(
           ? agentRolePreset
           : "contributor";
 
+        // Enforce hierarchy: approver cannot grant a role equal or higher than their own
+        const agentActorMembership = req.actor.type === "agent" && req.actor.agentId
+          ? await access.getMembership(companyId, "agent", req.actor.agentId)
+          : req.actor.userId
+            ? await access.getMembership(companyId, "user", req.actor.userId)
+            : null;
+        const agentIsAdmin = req.actor.userId
+          ? await access.isInstanceAdmin(req.actor.userId)
+          : false;
+        if (
+          !agentIsAdmin &&
+          !access.canModifyMember(
+            agentActorMembership?.membershipRole ?? null,
+            agentMembershipRole,
+          )
+        ) {
+          throw forbidden("Cannot approve invite granting equal or higher role");
+        }
+
         await access.ensureMembership(
           companyId,
           "agent",
@@ -2588,9 +2607,11 @@ export function accessRoutes(
       const memberId = req.params.memberId as string;
       await assertCompanyPermission(req, companyId, "users:manage_permissions");
 
-      const actorMembership = req.actor.userId
-        ? await access.getMembership(companyId, "user", req.actor.userId)
-        : null;
+      const actorMembership = req.actor.type === "agent" && req.actor.agentId
+        ? await access.getMembership(companyId, "agent", req.actor.agentId)
+        : req.actor.userId
+          ? await access.getMembership(companyId, "user", req.actor.userId)
+          : null;
       const targetMembers = await access.listMembers(companyId);
       const targetMember = targetMembers.find((m) => m.id === memberId);
       if (!targetMember) throw notFound("Member not found");
@@ -2616,9 +2637,11 @@ export function accessRoutes(
     const memberId = req.params.memberId as string;
     await assertCompanyPermission(req, companyId, "users:manage_permissions");
 
-    const actorMembership = req.actor.userId
-      ? await access.getMembership(companyId, "user", req.actor.userId)
-      : null;
+    const actorMembership = req.actor.type === "agent" && req.actor.agentId
+      ? await access.getMembership(companyId, "agent", req.actor.agentId)
+      : req.actor.userId
+        ? await access.getMembership(companyId, "user", req.actor.userId)
+        : null;
     const targetMembers = await access.listMembers(companyId);
     const targetMember = targetMembers.find((m) => m.id === memberId);
     if (!targetMember) throw notFound("Member not found");
@@ -2638,9 +2661,11 @@ export function accessRoutes(
     const memberId = req.params.memberId as string;
     await assertCompanyPermission(req, companyId, "users:manage_permissions");
 
-    const actorMembership = req.actor.userId
-      ? await access.getMembership(companyId, "user", req.actor.userId)
-      : null;
+    const actorMembership = req.actor.type === "agent" && req.actor.agentId
+      ? await access.getMembership(companyId, "agent", req.actor.agentId)
+      : req.actor.userId
+        ? await access.getMembership(companyId, "user", req.actor.userId)
+        : null;
     const targetMembers = await access.listMembers(companyId);
     const targetMember = targetMembers.find((m) => m.id === memberId);
     if (!targetMember) throw notFound("Member not found");
@@ -2660,9 +2685,11 @@ export function accessRoutes(
     const memberId = req.params.memberId as string;
     await assertCompanyPermission(req, companyId, "users:manage_permissions");
 
-    const actorMembership = req.actor.userId
-      ? await access.getMembership(companyId, "user", req.actor.userId)
-      : null;
+    const actorMembership = req.actor.type === "agent" && req.actor.agentId
+      ? await access.getMembership(companyId, "agent", req.actor.agentId)
+      : req.actor.userId
+        ? await access.getMembership(companyId, "user", req.actor.userId)
+        : null;
     const targetMembers = await access.listMembers(companyId);
     const targetMember = targetMembers.find((m) => m.id === memberId);
     if (!targetMember) throw notFound("Member not found");
