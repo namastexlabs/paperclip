@@ -11,13 +11,15 @@ type EmbeddedPostgresInstance = {
 };
 
 let pg: EmbeddedPostgresInstance | null = null;
-const dataDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../tmp-test-pg");
+let dataDir: string;
 
 export default async function setup() {
+  const port = await detectPort(0);
+  // Include port in directory name to avoid conflicts when CI runs parallel jobs
+  dataDir = resolve(dirname(fileURLToPath(import.meta.url)), `../../../../tmp-test-pg-${port}`);
+
   // Clean up any leftover data directory from a previous interrupted run
   rmSync(dataDir, { recursive: true, force: true });
-
-  const port = await detectPort(0);
 
   const EmbeddedPostgres = (await import("embedded-postgres")).default;
   pg = new EmbeddedPostgres({

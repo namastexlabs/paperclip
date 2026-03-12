@@ -56,17 +56,17 @@ export function resetMockActor() {
 
 /** A no-op storage service for tests that don't need asset storage. */
 const noopStorageService = {
-  provider: "local" as const,
-  putFile: async () => {
+  provider: "local_disk" as const,
+  putFile: async (_input: unknown): Promise<never> => {
     throw new Error("Storage not available in tests");
   },
-  getObject: async () => {
+  getObject: async (_companyId: string, _objectKey: string): Promise<never> => {
     throw new Error("Storage not available in tests");
   },
-  headObject: async () => {
+  headObject: async (_companyId: string, _objectKey: string): Promise<never> => {
     throw new Error("Storage not available in tests");
   },
-  deleteObject: async () => {
+  deleteObject: async (_companyId: string, _objectKey: string): Promise<never> => {
     throw new Error("Storage not available in tests");
   },
 };
@@ -99,7 +99,7 @@ export function createTestApp(db: Db) {
   api.use("/companies", companyRoutes(db));
   api.use(agentRoutes(db));
   api.use(projectRoutes(db));
-  api.use(issueRoutes(db, noopStorageService as any));
+  api.use(issueRoutes(db, noopStorageService));
   api.use(goalRoutes(db));
   api.use(approvalRoutes(db));
   api.use(secretRoutes(db));

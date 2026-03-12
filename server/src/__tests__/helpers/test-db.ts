@@ -28,26 +28,37 @@ export function getTestDb(): TestDb {
   };
 }
 
+/** Shared connection for cleanDb — avoids opening a new pool per beforeEach call. */
+let cleanupSql: ReturnType<typeof postgres> | null = null;
+
 /**
  * Truncates all tables in the public schema (except the Drizzle migration journal).
+ * Reuses a single connection pool across calls for performance.
  */
-export async function cleanDb(_db: Db): Promise<void> {
+export async function cleanDb(): Promise<void> {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) throw new Error("TEST_DATABASE_URL is not set.");
 
-  const sql = postgres(url, { max: 1 });
-  try {
-    const tables = await sql<{ tablename: string }[]>`
-      SELECT tablename FROM pg_tables
-      WHERE schemaname = 'public'
-        AND tablename != '__drizzle_migrations'
-    `;
+  if (!cleanupSql) {
+    cleanupSql = postgres(url, { max: 1 });
+  }
 
-    if (tables.length === 0) return;
+  const tables = await cleanupSql<{ tablename: string }[]>`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename != '__drizzle_migrations'
+  `;
 
-    const tableNames = tables.map((t) => `"${t.tablename}"`).join(", ");
-    await sql.unsafe(`TRUNCATE ${tableNames} CASCADE`);
-  } finally {
-    await sql.end();
+  if (tables.length === 0) return;
+
+  const tableNames = tables.map((t) => `"${t.tablename}"`).join(", ");
+  await cleanupSql.unsafe(`TRUNCATE ${tableNames} CASCADE`);
+}
+
+/** Close the shared cleanup connection (called from globalTeardown or afterAll). */
+export async function closeCleanupConnection(): Promise<void> {
+  if (cleanupSql) {
+    await cleanupSql.end();
+    cleanupSql = null;
   }
 }

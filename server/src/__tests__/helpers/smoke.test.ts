@@ -10,7 +10,7 @@ describe("test harness smoke test", () => {
   afterAll(() => close());
 
   beforeEach(async () => {
-    await cleanDb(db);
+    await cleanDb();
   });
 
   it("can insert and read back a company", async () => {

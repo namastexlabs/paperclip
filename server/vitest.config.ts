@@ -12,7 +12,7 @@ export default defineConfig({
         minThreads: 1,
       },
     },
-    teardownTimeout: 5000,
+    teardownTimeout: 30_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
