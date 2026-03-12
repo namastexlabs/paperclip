@@ -2625,7 +2625,8 @@ export function accessRoutes(
         companyId,
         memberId,
         req.body.grants ?? [],
-        req.actor.userId ?? null
+        req.actor.userId ?? null,
+        req.body.membershipRole
       );
       if (!updated) throw notFound("Member not found");
       res.json(updated);

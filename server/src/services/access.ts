@@ -99,6 +99,7 @@ export function accessService(db: Db) {
     memberId: string,
     grants: GrantInput[],
     grantedByUserId: string | null,
+    membershipRole?: MembershipRole,
   ) {
     const member = await db
       .select()
@@ -107,7 +108,16 @@ export function accessService(db: Db) {
       .then((rows) => rows[0] ?? null);
     if (!member) return null;
 
+    let updatedMember = member;
     await db.transaction(async (tx) => {
+      if (membershipRole !== undefined) {
+        const [row] = await tx
+          .update(companyMemberships)
+          .set({ membershipRole, updatedAt: new Date() })
+          .where(eq(companyMemberships.id, memberId))
+          .returning();
+        if (row) updatedMember = row;
+      }
       await tx
         .delete(principalPermissionGrants)
         .where(
@@ -140,10 +150,10 @@ export function accessService(db: Db) {
       action: "permissions.updated",
       entityType: "membership",
       entityId: memberId,
-      details: { grants: grants.map((g) => g.permissionKey) },
+      details: { grants: grants.map((g) => g.permissionKey), ...(membershipRole !== undefined ? { membershipRole } : {}) },
     });
 
-    return member;
+    return updatedMember;
   }
 
   async function promoteInstanceAdmin(userId: string) {

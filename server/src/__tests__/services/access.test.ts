@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { getTestDb, cleanDb, type TestDb } from "../helpers/test-db.js";
 import { accessService } from "../../services/access.js";
-import { companies, principalPermissionGrants } from "@paperclipai/db";
+import { companies, companyMemberships, principalPermissionGrants } from "@paperclipai/db";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -213,6 +213,45 @@ describe("accessService", () => {
       const co = await seedCompany();
       const result = await svc.setMemberPermissions(co.id, randomUUID(), [{ permissionKey: "agents:create" }], null);
       expect(result).toBeNull();
+    });
+
+    it("updates membershipRole when provided", async () => {
+      const co = await seedCompany();
+      const userId = randomUUID();
+      const m = await svc.ensureMembership(co.id, "user", userId, "contributor");
+      expect(m!.membershipRole).toBe("contributor");
+
+      const result = await svc.setMemberPermissions(
+        co.id,
+        m!.id,
+        [{ permissionKey: "agents:create" }],
+        null,
+        "admin",
+      );
+      expect(result).not.toBeNull();
+      expect(result!.membershipRole).toBe("admin");
+
+      // Verify persisted in DB
+      const rows = await testDb.db
+        .select()
+        .from(companyMemberships)
+        .where(eq(companyMemberships.id, m!.id));
+      expect(rows[0]!.membershipRole).toBe("admin");
+    });
+
+    it("does not change membershipRole when omitted", async () => {
+      const co = await seedCompany();
+      const userId = randomUUID();
+      const m = await svc.ensureMembership(co.id, "user", userId, "contributor");
+
+      const result = await svc.setMemberPermissions(
+        co.id,
+        m!.id,
+        [{ permissionKey: "agents:create" }],
+        null,
+      );
+      expect(result).not.toBeNull();
+      expect(result!.membershipRole).toBe("contributor");
     });
   });
 
