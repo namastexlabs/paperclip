@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
+import { healthApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Settings, Check } from "lucide-react";
@@ -32,6 +33,13 @@ export function CompanySettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
 
+  const healthQuery = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+  const emailConfigured = healthQuery.data?.emailConfigured ?? false;
+
   // General settings local state
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
@@ -54,6 +62,12 @@ export function CompanySettings() {
   const [humanInviteError, setHumanInviteError] = useState<string | null>(null);
   const [humanInviteRole, setHumanInviteRole] = useState<MembershipRole>("contributor");
   const [humanInviteCopied, setHumanInviteCopied] = useState(false);
+  const [humanInviteId, setHumanInviteId] = useState<string | null>(null);
+  const [humanInviteToken, setHumanInviteToken] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteEmailSent, setInviteEmailSent] = useState(false);
+  const [inviteEmailError, setInviteEmailError] = useState<string | null>(null);
+  const [pendingSendEmail, setPendingSendEmail] = useState(false);
 
   const generalDirty =
     !!selectedCompany &&
@@ -145,12 +159,45 @@ export function CompanySettings() {
         defaultsPayload: { human: { grants: roleGrants }, rolePreset: humanInviteRole },
       });
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setHumanInviteUrl(data.inviteUrl);
       setHumanInviteError(null);
+      setHumanInviteId(data.id);
+      setHumanInviteToken(data.token);
+      setInviteEmailSent(false);
+      setInviteEmailError(null);
+      if (pendingSendEmail && inviteEmail.trim()) {
+        setPendingSendEmail(false);
+        try {
+          await accessApi.sendInviteEmail(selectedCompanyId!, data.id, {
+            email: inviteEmail.trim(),
+            token: data.token,
+          });
+          setInviteEmailSent(true);
+        } catch (err) {
+          setInviteEmailError(err instanceof Error ? err.message : "Failed to send email");
+        }
+      }
+      setPendingSendEmail(false);
     },
     onError: (err: Error) => {
       setHumanInviteError(err.message);
+      setPendingSendEmail(false);
+    },
+  });
+
+  const sendInviteEmailMutation = useMutation({
+    mutationFn: () =>
+      accessApi.sendInviteEmail(selectedCompanyId!, humanInviteId!, {
+        email: inviteEmail.trim(),
+        token: humanInviteToken!,
+      }),
+    onSuccess: () => {
+      setInviteEmailSent(true);
+      setInviteEmailError(null);
+    },
+    onError: (err: Error) => {
+      setInviteEmailError(err.message);
     },
   });
 
@@ -162,6 +209,12 @@ export function CompanySettings() {
     setHumanInviteUrl(null);
     setHumanInviteError(null);
     setHumanInviteCopied(false);
+    setHumanInviteId(null);
+    setHumanInviteToken(null);
+    setInviteEmail("");
+    setInviteEmailSent(false);
+    setInviteEmailError(null);
+    setPendingSendEmail(false);
   }, [selectedCompanyId]);
   const archiveMutation = useMutation({
     mutationFn: ({
@@ -433,18 +486,57 @@ export function CompanySettings() {
             </select>
           </div>
 
+          {emailConfigured && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Recipient email (optional)</label>
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="colleague@example.com"
+              />
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
+            {emailConfigured && inviteEmail.trim() && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setPendingSendEmail(true);
+                  humanInviteMutation.mutate();
+                }}
+                disabled={humanInviteMutation.isPending}
+              >
+                {humanInviteMutation.isPending && pendingSendEmail ? "Sending..." : "Send Invite Email"}
+              </Button>
+            )}
             <Button
               size="sm"
-              onClick={() => humanInviteMutation.mutate()}
+              variant={emailConfigured && inviteEmail.trim() ? "outline" : "default"}
+              onClick={() => {
+                setPendingSendEmail(false);
+                humanInviteMutation.mutate();
+              }}
               disabled={humanInviteMutation.isPending}
             >
-              {humanInviteMutation.isPending ? "Generating..." : "Generate Invite Link"}
+              {humanInviteMutation.isPending && !pendingSendEmail ? "Generating..." : "Generate Link Only"}
             </Button>
           </div>
 
           {humanInviteError && (
             <p className="text-sm text-destructive">{humanInviteError}</p>
+          )}
+
+          {inviteEmailSent && (
+            <div className="flex items-center gap-1.5 text-sm text-green-600">
+              <Check className="h-3.5 w-3.5" />
+              Invite email sent to {inviteEmail}
+            </div>
+          )}
+          {inviteEmailError && (
+            <p className="text-sm text-destructive">{inviteEmailError}</p>
           )}
 
           {humanInviteUrl && (
@@ -467,6 +559,16 @@ export function CompanySettings() {
                 >
                   {humanInviteCopied ? "Copied!" : "Copy Link"}
                 </Button>
+                {emailConfigured && humanInviteId && !inviteEmailSent && inviteEmail.trim() && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => sendInviteEmailMutation.mutate()}
+                    disabled={sendInviteEmailMutation.isPending}
+                  >
+                    {sendInviteEmailMutation.isPending ? "Sending..." : "Send Email Now"}
+                  </Button>
+                )}
                 <span className="text-xs text-muted-foreground">
                   Expires in 24 hours
                 </span>

@@ -9,11 +9,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Router } from "express";
 import type { Request } from "express";
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, gt, isNull, desc } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agentApiKeys,
+  authAccounts,
   authUsers,
+  authVerifications,
+  companies,
   invites,
   joinRequests
 } from "@paperclipai/db";
@@ -2529,6 +2532,30 @@ export function accessRoutes(
         }).catch(() => {});
       }
 
+      // Send approval email for human join requests
+      if (existing.requestType === "human" && existing.requestingUserId) {
+        const emailService = req.app.locals.emailService as EmailService | undefined;
+        if (emailService?.isConfigured()) {
+          void (async () => {
+            const [user] = await db
+              .select({ email: authUsers.email })
+              .from(authUsers)
+              .where(eq(authUsers.id, existing.requestingUserId!))
+              .limit(1);
+            const [company] = await db
+              .select({ name: companies.name })
+              .from(companies)
+              .where(eq(companies.id, companyId))
+              .limit(1);
+            if (user?.email && company?.name) {
+              await emailService.sendApprovalEmail(user.email, {
+                companyName: company.name,
+              });
+            }
+          })().catch(() => {});
+        }
+      }
+
       res.json(toJoinRequestResponse(approved));
     }
   );
@@ -2896,6 +2923,126 @@ export function accessRoutes(
     res.json({
       configured: emailService?.isConfigured() ?? false,
     });
+  });
+
+
+  // ── Password reset ──────────────────────────────────────────────
+  router.post("/users/forgot-password", async (req, res) => {
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (!email) {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+    const successResponse = { sent: true };
+
+    const [user] = await db
+      .select({ id: authUsers.id })
+      .from(authUsers)
+      .where(eq(authUsers.email, email))
+      .limit(1);
+    if (!user) {
+      res.json(successResponse);
+      return;
+    }
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const identifier = `password-reset:${email}`;
+    const recentCount = await db
+      .select({ count: authVerifications.id })
+      .from(authVerifications)
+      .where(
+        and(
+          eq(authVerifications.identifier, identifier),
+          gt(authVerifications.createdAt, oneHourAgo),
+        ),
+      )
+      .then((rows) => rows.length);
+    if (recentCount >= 3) {
+      res.json(successResponse);
+      return;
+    }
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await db.insert(authVerifications).values({
+      id: randomBytes(16).toString("hex"),
+      identifier,
+      value: tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const emailService = req.app.locals.emailService as EmailService | undefined;
+    if (emailService?.isConfigured()) {
+      const baseUrl = requestBaseUrl(req);
+      const resetUrl = `${baseUrl}/auth?mode=reset&token=${rawToken}`;
+      await emailService.sendPasswordResetEmail(email, { resetUrl });
+    }
+
+    res.json(successResponse);
+  });
+
+  router.post("/users/reset-password", async (req, res) => {
+    const token = typeof req.body.token === "string" ? req.body.token.trim() : "";
+    const newPassword = typeof req.body.newPassword === "string" ? req.body.newPassword : "";
+
+    if (!token || newPassword.length < 8) {
+      res.status(400).json({ error: "Invalid token or password too short (min 8 chars)" });
+      return;
+    }
+
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const now = new Date();
+
+    const [verification] = await db
+      .select()
+      .from(authVerifications)
+      .where(
+        and(
+          eq(authVerifications.value, tokenHash),
+          gt(authVerifications.expiresAt, now),
+        ),
+      )
+      .limit(1);
+
+    if (!verification || !verification.identifier.startsWith("password-reset:")) {
+      res.status(400).json({ error: "Invalid or expired reset token" });
+      return;
+    }
+
+    const email = verification.identifier.replace("password-reset:", "");
+
+    const [account] = await db
+      .select({ id: authAccounts.id })
+      .from(authAccounts)
+      .innerJoin(authUsers, eq(authAccounts.userId, authUsers.id))
+      .where(
+        and(
+          eq(authUsers.email, email),
+          eq(authAccounts.providerId, "credential"),
+        ),
+      )
+      .limit(1);
+
+    if (!account) {
+      res.status(400).json({ error: "No credential account found for this email" });
+      return;
+    }
+
+    const { hashPassword } = await import("better-auth/crypto");
+    const hashed = await hashPassword(newPassword);
+
+    await db
+      .update(authAccounts)
+      .set({ password: hashed })
+      .where(eq(authAccounts.id, account.id));
+
+    await db
+      .delete(authVerifications)
+      .where(eq(authVerifications.id, verification.id));
+
+    res.json({ success: true });
   });
 
   return router;

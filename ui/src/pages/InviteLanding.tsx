@@ -6,10 +6,13 @@ import { authApi } from "../api/auth";
 import { healthApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
+import { Check } from "lucide-react";
 import { AGENT_ADAPTER_TYPES } from "@paperclipai/shared";
 import type { AgentAdapterType, JoinRequest } from "@paperclipai/shared";
 
 type JoinType = "human" | "agent";
+type InlineAuthMode = "sign_in" | "sign_up";
+
 const joinAdapterOptions: AgentAdapterType[] = [...AGENT_ADAPTER_TYPES];
 
 const adapterLabels: Record<string, string> = {
@@ -48,6 +51,13 @@ export function InviteLandingPage() {
   const [capabilities, setCapabilities] = useState("");
   const [result, setResult] = useState<{ kind: "bootstrap" | "join"; payload: unknown } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [authMode, setAuthMode] = useState<InlineAuthMode>("sign_up");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [joinRequestSent, setJoinRequestSent] = useState(false);
 
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
@@ -111,6 +121,41 @@ export function InviteLandingPage() {
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Failed to accept invite");
+    },
+  });
+
+  const autoAcceptMutation = useMutation({
+    mutationFn: () => accessApi.acceptInvite(token, { requestType: "human" }),
+    onSuccess: () => {
+      setJoinRequestSent(true);
+    },
+    onError: (err) => {
+      setAuthError(err instanceof Error ? err.message : "Failed to submit join request");
+    },
+  });
+
+  const authMutation = useMutation({
+    mutationFn: async () => {
+      if (authMode === "sign_up") {
+        await authApi.signUpEmail({
+          name: authName.trim(),
+          email: authEmail.trim(),
+          password: authPassword,
+        });
+      } else {
+        await authApi.signInEmail({
+          email: authEmail.trim(),
+          password: authPassword,
+        });
+      }
+    },
+    onSuccess: async () => {
+      setAuthError(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
+      autoAcceptMutation.mutate();
+    },
+    onError: (err) => {
+      setAuthError(err instanceof Error ? err.message : "Authentication failed");
     },
   });
 
@@ -221,6 +266,25 @@ export function InviteLandingPage() {
     );
   }
 
+  if (joinRequestSent) {
+    return (
+      <div className="mx-auto max-w-xl py-10">
+        <div className="rounded-lg border border-border bg-card p-6">
+          <div className="flex items-center gap-2">
+            <Check className="h-5 w-5 text-green-600" />
+            <h1 className="text-lg font-semibold">Request sent</h1>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your join request has been submitted and is waiting for admin approval.
+          </p>
+          <Button asChild className="mt-4" variant="outline">
+            <Link to="/auth">Go to Sign In</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl py-10">
       <div className="rounded-lg border border-border bg-card p-6">
@@ -285,33 +349,102 @@ export function InviteLandingPage() {
         )}
 
         {requiresAuthForHuman && (
-          <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-sm">
-            Sign in or create an account before submitting a human join request.
-            <div className="mt-2">
-              <Button asChild size="sm" variant="outline">
-                <Link to={`/auth?next=${encodeURIComponent(`/invite/${token}`)}`}>Sign in / Create account</Link>
+          <div className="mt-4 rounded-md border border-border bg-muted/30 p-4">
+            <p className="text-sm font-medium mb-3">
+              {authMode === "sign_up" ? "Create an account to join" : "Sign in to join"}
+            </p>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                authMutation.mutate();
+              }}
+            >
+              {authMode === "sign_up" && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+                  <input
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    autoComplete="name"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+                <input
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Password</label>
+                <input
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  autoComplete={authMode === "sign_up" ? "new-password" : "current-password"}
+                />
+              </div>
+              {authError && <p className="text-xs text-destructive">{authError}</p>}
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  authMutation.isPending ||
+                  autoAcceptMutation.isPending ||
+                  authEmail.trim().length === 0 ||
+                  authPassword.length < 8 ||
+                  (authMode === "sign_up" && authName.trim().length === 0)
+                }
+                className="w-full"
+              >
+                {authMutation.isPending || autoAcceptMutation.isPending
+                  ? "Working\u2026"
+                  : authMode === "sign_up"
+                    ? "Create Account & Join"
+                    : "Sign In & Join"}
               </Button>
+            </form>
+            <div className="mt-3 text-xs text-muted-foreground">
+              {authMode === "sign_up" ? "Already have an account?" : "Need an account?"}{" "}
+              <button
+                type="button"
+                className="font-medium text-foreground underline underline-offset-2"
+                onClick={() => {
+                  setAuthError(null);
+                  setAuthMode(authMode === "sign_up" ? "sign_in" : "sign_up");
+                }}
+              >
+                {authMode === "sign_up" ? "Sign in" : "Create one"}
+              </button>
             </div>
           </div>
         )}
 
         {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
 
-        <Button
-          className="mt-5"
-          disabled={
-            acceptMutation.isPending ||
-            (joinType === "agent" && invite.inviteType !== "bootstrap_ceo" && agentName.trim().length === 0) ||
-            requiresAuthForHuman
-          }
-          onClick={() => acceptMutation.mutate()}
-        >
-          {acceptMutation.isPending
-            ? "Submitting…"
-            : invite.inviteType === "bootstrap_ceo"
-              ? "Accept bootstrap invite"
-              : "Submit join request"}
-        </Button>
+        {!requiresAuthForHuman && (
+          <Button
+            className="mt-5"
+            disabled={
+              acceptMutation.isPending ||
+              (joinType === "agent" && invite.inviteType !== "bootstrap_ceo" && agentName.trim().length === 0)
+            }
+            onClick={() => acceptMutation.mutate()}
+          >
+            {acceptMutation.isPending
+              ? "Submitting\u2026"
+              : invite.inviteType === "bootstrap_ceo"
+                ? "Accept bootstrap invite"
+                : "Submit join request"}
+          </Button>
+        )}
       </div>
     </div>
   );

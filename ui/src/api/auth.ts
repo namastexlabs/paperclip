@@ -71,4 +71,39 @@ export const authApi = {
   signOut: async () => {
     await authPost("/sign-out", {});
   },
+  forgotPassword: async (email: string) => {
+    const res = await fetch("/api/users/forgot-password", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg =
+        payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).error === "string"
+          ? (payload as { error: string }).error
+          : `Request failed: ${res.status}`;
+      throw new Error(msg);
+    }
+    return payload as { sent: boolean };
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const res = await fetch("/api/users/reset-password", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, newPassword }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg =
+        payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).error === "string"
+          ? (payload as { error: string }).error
+          : `Request failed: ${res.status}`;
+      throw new Error(msg);
+    }
+    return payload as { success: boolean };
+  },
 };

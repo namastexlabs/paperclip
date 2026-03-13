@@ -1,8 +1,9 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
 import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
-import { instanceUserRoles, invites } from "@paperclipai/db";
+import { authUsers, instanceUserRoles, invites } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
+import type { EmailService } from "../services/email.js";
 
 export function healthRoutes(
   db?: Db,
@@ -20,7 +21,7 @@ export function healthRoutes(
 ) {
   const router = Router();
 
-  router.get("/", async (_req, res) => {
+  router.get("/", async (req, res) => {
     if (!db) {
       res.json({ status: "ok" });
       return;
@@ -54,6 +55,13 @@ export function healthRoutes(
       }
     }
 
+    const userCount = await db
+      .select({ count: count() })
+      .from(authUsers)
+      .then((rows) => Number(rows[0]?.count ?? 0));
+    const hasUsers = userCount > 0;
+    const emailService = req.app.locals.emailService as EmailService | undefined;
+
     res.json({
       status: "ok",
       deploymentMode: opts.deploymentMode,
@@ -61,6 +69,8 @@ export function healthRoutes(
       authReady: opts.authReady,
       bootstrapStatus,
       bootstrapInviteActive,
+      hasUsers,
+      emailConfigured: emailService?.isConfigured() ?? false,
       features: {
         companyDeletionEnabled: opts.companyDeletionEnabled,
       },
