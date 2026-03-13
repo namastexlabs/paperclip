@@ -7,6 +7,7 @@ import {
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  authUsers,
   heartbeatRunEvents,
   heartbeatRuns,
   issues,
@@ -1113,6 +1114,8 @@ export function heartbeatService(db: Db) {
             assigneeAgentId: issues.assigneeAgentId,
             assigneeAdapterOverrides: issues.assigneeAdapterOverrides,
             executionWorkspaceSettings: issues.executionWorkspaceSettings,
+            assigneeUserId: issues.assigneeUserId,
+            createdByUserId: issues.createdByUserId,
           })
           .from(issues)
           .where(and(eq(issues.id, issueId), eq(issues.companyId, agent.companyId)))
@@ -1182,6 +1185,35 @@ export function heartbeatService(db: Db) {
           .where(and(eq(issues.id, issueId), eq(issues.companyId, agent.companyId)))
           .then((rows) => rows[0] ?? null)
       : null;
+
+    // Enrich context with user information for assignee and creator
+    if (issueAssigneeConfig) {
+      const userIdsToResolve = [
+        issueAssigneeConfig.assigneeUserId,
+        issueAssigneeConfig.createdByUserId,
+      ].filter((id): id is string => typeof id === "string" && id.length > 0);
+      if (userIdsToResolve.length > 0) {
+        const uniqueIds = [...new Set(userIdsToResolve)];
+        const resolvedUsers = await db
+          .select({ id: authUsers.id, name: authUsers.name, email: authUsers.email })
+          .from(authUsers)
+          .where(
+            uniqueIds.length === 1
+              ? eq(authUsers.id, uniqueIds[0])
+              : sql`${authUsers.id} IN (${sql.join(uniqueIds.map((id) => sql`${id}`), sql`, `)})`,
+          );
+        const userMap = new Map(resolvedUsers.map((u) => [u.id, u]));
+        if (issueAssigneeConfig.assigneeUserId) {
+          const u = userMap.get(issueAssigneeConfig.assigneeUserId);
+          if (u) context.assigneeUser = { id: u.id, name: u.name, email: u.email };
+        }
+        if (issueAssigneeConfig.createdByUserId) {
+          const u = userMap.get(issueAssigneeConfig.createdByUserId);
+          if (u) context.createdByUser = { id: u.id, name: u.name };
+        }
+      }
+    }
+
     const executionWorkspace = await realizeExecutionWorkspace({
       base: {
         baseCwd: resolvedWorkspace.cwd,

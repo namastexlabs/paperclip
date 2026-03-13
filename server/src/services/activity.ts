@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { activityLog, heartbeatRuns, issues } from "@paperclipai/db";
+import { activityLog, authUsers, heartbeatRuns, issues } from "@paperclipai/db";
 
 export interface ActivityFilters {
   companyId: string;
@@ -11,8 +11,27 @@ export interface ActivityFilters {
 
 export function activityService(db: Db) {
   const issueIdAsText = sql<string>`${issues.id}::text`;
+
+  async function enrichActivityWithActorNames<T extends { actorType: string; actorId: string }>(
+    rows: T[],
+  ): Promise<(T & { actorName: string | null })[]> {
+    const userActorIds = [...new Set(rows.filter((r) => r.actorType === "user").map((r) => r.actorId))];
+    const userMap = new Map<string, string>();
+    if (userActorIds.length > 0) {
+      const users = await db
+        .select({ id: authUsers.id, name: authUsers.name })
+        .from(authUsers)
+        .where(inArray(authUsers.id, userActorIds));
+      for (const u of users) userMap.set(u.id, u.name);
+    }
+    return rows.map((r) => ({
+      ...r,
+      actorName: r.actorType === "user" ? userMap.get(r.actorId) ?? null : null,
+    }));
+  }
+
   return {
-    list: (filters: ActivityFilters) => {
+    list: async (filters: ActivityFilters) => {
       const conditions = [eq(activityLog.companyId, filters.companyId)];
 
       if (filters.agentId) {
@@ -25,7 +44,7 @@ export function activityService(db: Db) {
         conditions.push(eq(activityLog.entityId, filters.entityId));
       }
 
-      return db
+      const rows = await db
         .select({ activityLog })
         .from(activityLog)
         .leftJoin(
@@ -45,11 +64,12 @@ export function activityService(db: Db) {
           ),
         )
         .orderBy(desc(activityLog.createdAt))
-        .then((rows) => rows.map((r) => r.activityLog));
+        .then((r) => r.map((row) => row.activityLog));
+      return enrichActivityWithActorNames(rows);
     },
 
-    forIssue: (issueId: string) =>
-      db
+    forIssue: async (issueId: string) => {
+      const rows = await db
         .select()
         .from(activityLog)
         .where(
@@ -58,7 +78,9 @@ export function activityService(db: Db) {
             eq(activityLog.entityId, issueId),
           ),
         )
-        .orderBy(desc(activityLog.createdAt)),
+        .orderBy(desc(activityLog.createdAt));
+      return enrichActivityWithActorNames(rows);
+    },
 
     runsForIssue: (companyId: string, issueId: string) =>
       db
