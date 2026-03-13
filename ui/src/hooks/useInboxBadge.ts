@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { accessApi } from "../api/access";
+import { activityApi } from "../api/activity";
 import { ApiError } from "../api/client";
 import { approvalsApi } from "../api/approvals";
 import { dashboardApi } from "../api/dashboard";
@@ -93,6 +94,12 @@ export function useInboxBadge(companyId: string | null | undefined) {
     enabled: !!companyId,
   });
 
+  const { data: mentionsData = [] } = useQuery({
+    queryKey: queryKeys.mentions(companyId!),
+    queryFn: () => activityApi.mentions(companyId!),
+    enabled: !!companyId,
+  });
+
   return useMemo(
     () =>
       computeInboxBadgeData({
@@ -102,7 +109,8 @@ export function useInboxBadge(companyId: string | null | undefined) {
         heartbeatRuns,
         unreadIssues,
         dismissed,
+        mentionCount: mentionsData.length,
       }),
-    [approvals, joinRequests, dashboard, heartbeatRuns, unreadIssues, dismissed],
+    [approvals, joinRequests, dashboard, heartbeatRuns, unreadIssues, dismissed, mentionsData],
   );
 }

@@ -20,6 +20,7 @@ export interface InboxBadgeData {
   joinRequests: number;
   unreadTouchedIssues: number;
   alerts: number;
+  mentions: number;
 }
 
 export function loadDismissedInboxItems(): Set<string> {
@@ -111,6 +112,7 @@ export function computeInboxBadgeData({
   heartbeatRuns,
   unreadIssues,
   dismissed,
+  mentionCount = 0,
 }: {
   approvals: Approval[];
   joinRequests: JoinRequest[];
@@ -118,6 +120,7 @@ export function computeInboxBadgeData({
   heartbeatRuns: HeartbeatRun[];
   unreadIssues: Issue[];
   dismissed: Set<string>;
+  mentionCount?: number;
 }): InboxBadgeData {
   const actionableApprovals = approvals.filter((approval) =>
     ACTIONABLE_APPROVAL_STATUSES.has(approval.status),
@@ -140,11 +143,12 @@ export function computeInboxBadgeData({
   const alerts = Number(showAggregateAgentError) + Number(showBudgetAlert);
 
   return {
-    inbox: actionableApprovals + joinRequests.length + failedRuns + unreadTouchedIssues + alerts,
+    inbox: actionableApprovals + joinRequests.length + failedRuns + unreadTouchedIssues + alerts + mentionCount,
     approvals: actionableApprovals,
     failedRuns,
     joinRequests: joinRequests.length,
     unreadTouchedIssues,
     alerts,
+    mentions: mentionCount,
   };
 }

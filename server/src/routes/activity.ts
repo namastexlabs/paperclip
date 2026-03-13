@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
+import { activityLog, issues } from "@paperclipai/db";
 import { validate } from "../middleware/validate.js";
 import { activityService } from "../services/activity.js";
 import { assertBoard, assertCompanyAccess } from "./authz.js";
@@ -82,6 +84,55 @@ export function activityRoutes(db: Db) {
     const runId = req.params.runId as string;
     const result = await svc.issuesForRun(runId);
     res.json(result);
+  });
+
+  // GET /companies/:companyId/mentions?userId=me — issues where user was @mentioned
+  router.get("/companies/:companyId/mentions", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    let userId = req.query.userId as string | undefined;
+    if (userId === "me") {
+      if (req.actor.type !== "board" || !req.actor.userId) {
+        res.status(403).json({ error: "userId=me requires board authentication" });
+        return;
+      }
+      userId = req.actor.userId;
+    }
+    if (!userId) {
+      res.status(400).json({ error: "userId query parameter is required" });
+      return;
+    }
+
+    const mentionActivities = await db
+      .select({
+        issueId: issues.id,
+        identifier: issues.identifier,
+        title: issues.title,
+        status: issues.status,
+        priority: issues.priority,
+        mentionedAt: activityLog.createdAt,
+        commentId: sql<string>`${activityLog.details} ->> 'commentId'`,
+      })
+      .from(activityLog)
+      .innerJoin(
+        issues,
+        and(
+          eq(activityLog.entityType, sql`'issue'`),
+          eq(activityLog.entityId, sql<string>`${issues.id}::text`),
+        ),
+      )
+      .where(
+        and(
+          eq(activityLog.companyId, companyId),
+          eq(activityLog.action, "issue.user_mentioned"),
+          sql`${activityLog.details} ->> 'userId' = ${userId}`,
+        ),
+      )
+      .orderBy(desc(activityLog.createdAt))
+      .limit(100);
+
+    res.json(mentionActivities);
   });
 
   return router;

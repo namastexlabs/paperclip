@@ -5,6 +5,7 @@ import { issuesApi } from "../api/issues";
 import { activityApi } from "../api/activity";
 import { heartbeatsApi } from "../api/heartbeats";
 import { agentsApi } from "../api/agents";
+import { accessApi } from "../api/access";
 import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
@@ -251,6 +252,12 @@ export function IssueDetail() {
     queryFn: () => projectsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
+
+  const { data: people } = useQuery({
+    queryKey: queryKeys.access.people(selectedCompanyId!),
+    queryFn: () => accessApi.listPeople(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
   const currentUserId = session?.user?.id ?? session?.session?.userId ?? null;
   const { orderedProjects } = useProjectOrder({
     projects: projects ?? [],
@@ -276,6 +283,16 @@ export function IssueDetail() {
         kind: "agent",
       });
     }
+    const activeMembers = [...(people ?? [])]
+      .filter((p) => p.status === "active")
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const member of activeMembers) {
+      options.push({
+        id: `user:${member.id}`,
+        name: member.name,
+        kind: "user",
+      });
+    }
     for (const project of orderedProjects) {
       options.push({
         id: `project:${project.id}`,
@@ -286,7 +303,7 @@ export function IssueDetail() {
       });
     }
     return options;
-  }, [agents, orderedProjects]);
+  }, [agents, people, orderedProjects]);
 
   const childIssues = useMemo(() => {
     if (!allIssues || !issue) return [];

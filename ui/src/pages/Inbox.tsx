@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { approvalsApi } from "../api/approvals";
 import { accessApi } from "../api/access";
+import { activityApi } from "../api/activity";
+import type { MentionEntry } from "../api/activity";
 import { ApiError } from "../api/client";
 import { dashboardApi } from "../api/dashboard";
 import { issuesApi } from "../api/issues";
@@ -57,14 +59,16 @@ type InboxCategoryFilter =
   | "join_requests"
   | "approvals"
   | "failed_runs"
-  | "alerts";
+  | "alerts"
+  | "mentions";
 type InboxApprovalFilter = "all" | "actionable" | "resolved";
 type SectionKey =
   | "issues_i_touched"
   | "join_requests"
   | "approvals"
   | "failed_runs"
-  | "alerts";
+  | "alerts"
+  | "mentions";
 
 const RUN_SOURCE_LABELS: Record<string, string> = {
   timer: "Scheduled",
@@ -337,6 +341,12 @@ export function Inbox() {
     enabled: !!selectedCompanyId,
   });
 
+  const { data: mentionsRaw = [], isLoading: isMentionsLoading } = useQuery({
+    queryKey: queryKeys.mentions(selectedCompanyId!),
+    queryFn: () => activityApi.mentions(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
   const touchedIssues = useMemo(() => getRecentTouchedIssues(touchedIssuesRaw), [touchedIssuesRaw]);
   const unreadTouchedIssues = useMemo(
     () => touchedIssues.filter((issue) => issue.isUnreadForMe),
@@ -528,6 +538,7 @@ export function Inbox() {
   const hasAlerts = showAggregateAgentError || showBudgetAlert;
   const hasJoinRequests = joinRequests.length > 0 || approvedRequests.size > 0;
   const hasTouchedIssues = touchedIssues.length > 0;
+  const hasMentions = mentionsRaw.length > 0;
 
   const showJoinRequestsCategory =
     allCategoryFilter === "everything" || allCategoryFilter === "join_requests";
@@ -537,6 +548,7 @@ export function Inbox() {
   const showFailedRunsCategory =
     allCategoryFilter === "everything" || allCategoryFilter === "failed_runs";
   const showAlertsCategory = allCategoryFilter === "everything" || allCategoryFilter === "alerts";
+  const showMentionsCategory = allCategoryFilter === "everything" || allCategoryFilter === "mentions";
 
   const approvalsToRender = tab === "all" ? filteredAllApprovals : actionableApprovals;
   const showTouchedSection =
@@ -553,10 +565,13 @@ export function Inbox() {
   const showFailedRunsSection =
     tab === "all" ? showFailedRunsCategory && hasRunFailures : tab === "unread" && hasRunFailures;
   const showAlertsSection = tab === "all" ? showAlertsCategory && hasAlerts : tab === "unread" && hasAlerts;
+  const showMentionsSection =
+    tab === "all" ? showMentionsCategory && hasMentions : hasMentions;
 
   const visibleSections = [
     showFailedRunsSection ? "failed_runs" : null,
     showAlertsSection ? "alerts" : null,
+    showMentionsSection ? "mentions" : null,
     showApprovalsSection ? "approvals" : null,
     showJoinRequestsSection ? "join_requests" : null,
     showTouchedSection ? "issues_i_touched" : null,
@@ -568,7 +583,8 @@ export function Inbox() {
     !isDashboardLoading &&
     !isIssuesLoading &&
     !isTouchedIssuesLoading &&
-    !isRunsLoading;
+    !isRunsLoading &&
+    !isMentionsLoading;
 
   const showSeparatorBefore = (key: SectionKey) => visibleSections.indexOf(key) > 0;
   const unreadIssueIds = unreadTouchedIssues
@@ -617,6 +633,7 @@ export function Inbox() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="everything">All categories</SelectItem>
+                <SelectItem value="mentions">Mentions</SelectItem>
                 <SelectItem value="issues_i_touched">My recent issues</SelectItem>
                 <SelectItem value="join_requests">Join requests</SelectItem>
                 <SelectItem value="approvals">Approvals</SelectItem>
@@ -663,6 +680,41 @@ export function Inbox() {
                 : "No inbox items match these filters."
           }
         />
+      )}
+
+      {showMentionsSection && (
+        <>
+          {showSeparatorBefore("mentions") && <Separator />}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Mentions
+            </h3>
+            <div className="divide-y divide-border border border-border">
+              {mentionsRaw.map((mention: MentionEntry) => (
+                <Link
+                  key={`${mention.issueId}-${mention.mentionedAt}`}
+                  to={`/issues/${mention.identifier ?? mention.issueId}`}
+                  state={issueLinkState}
+                  className="flex min-w-0 cursor-pointer items-start gap-2 px-3 py-3 no-underline text-inherit transition-colors hover:bg-accent/50 sm:items-center sm:gap-3 sm:px-4"
+                >
+                  <span className="inline-flex shrink-0 self-center"><StatusIcon status={mention.status} /></span>
+                  <span className="inline-flex shrink-0 self-center"><PriorityIcon priority={mention.priority} /></span>
+                  <span className="shrink-0 self-center text-xs font-mono text-muted-foreground">
+                    {mention.identifier ?? mention.issueId.slice(0, 8)}
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="line-clamp-2 min-w-0 sm:line-clamp-1 sm:block sm:truncate">
+                      {mention.title}
+                    </span>
+                  </span>
+                  <span className="hidden shrink-0 self-center text-xs text-muted-foreground sm:block">
+                    mentioned {timeAgo(mention.mentionedAt)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {showApprovalsSection && (

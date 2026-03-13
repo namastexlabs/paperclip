@@ -35,7 +35,7 @@ import { cn } from "../lib/utils";
 export interface MentionOption {
   id: string;
   name: string;
-  kind?: "agent" | "project";
+  kind?: "agent" | "project" | "user";
   projectId?: string;
   projectColor?: string | null;
 }
@@ -600,6 +600,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
               {option.kind === "project" && option.projectId && (
                 <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
                   Project
+                </span>
+              )}
+              {option.kind === "user" && (
+                <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Person
                 </span>
               )}
             </button>

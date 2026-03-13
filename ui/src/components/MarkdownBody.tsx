@@ -1,4 +1,4 @@
-import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode, Fragment } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { parseProjectMentionHref } from "@paperclipai/shared";
@@ -112,6 +112,26 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
   );
 }
 
+function highlightMentions(children: ReactNode): ReactNode {
+  if (children == null) return children;
+  if (typeof children === "string") {
+    const mentionRegex = /(\B@\w+)/g;
+    const parts = children.split(mentionRegex);
+    if (parts.length <= 1) return children;
+    return parts.map((part, i) =>
+      mentionRegex.test(part) ? (
+        <span key={i} className="font-medium text-primary">{part}</span>
+      ) : (
+        <Fragment key={i}>{part}</Fragment>
+      ),
+    );
+  }
+  if (Array.isArray(children)) {
+    return children.map((child, i) => <Fragment key={i}>{highlightMentions(child)}</Fragment>);
+  }
+  return children;
+}
+
 export function MarkdownBody({ children, className }: MarkdownBodyProps) {
   const { theme } = useTheme();
   return (
@@ -151,6 +171,12 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
                 {linkChildren}
               </a>
             );
+          },
+          p: ({ node: _node, children: pChildren, ...pProps }) => {
+            return <p {...pProps}>{highlightMentions(pChildren)}</p>;
+          },
+          li: ({ node: _node, children: liChildren, ...liProps }) => {
+            return <li {...liProps}>{highlightMentions(liChildren)}</li>;
           },
         }}
       >
