@@ -21,6 +21,7 @@ import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
+import { UserMenu } from "./UserMenu";
 
 export function Sidebar() {
   const { openNewIssue } = useDialog();
@@ -98,6 +99,9 @@ export function Sidebar() {
           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
         </SidebarSection>
       </nav>
+      <div className="shrink-0 border-t border-border px-3 py-2">
+        <UserMenu />
+      </div>
     </aside>
   );
 }
