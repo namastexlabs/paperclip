@@ -1284,7 +1284,6 @@ export function issueService(db: Db) {
         mentions = await findMentionsInner(opts.companyId, opts.body);
       } catch (err) {
         logger.warn({ err, issueId: opts.issueId }, "failed to resolve @-mentions");
-        return;
       }
 
       for (const mentionedId of mentions.agentIds) {
@@ -1322,7 +1321,8 @@ export function issueService(db: Db) {
           details: { userId: mentionedUserId, issueId: opts.issueId, commentId: opts.commentId },
         }).catch((err) => logger.warn({ err, issueId: opts.issueId }, "failed to log user mention activity"));
 
-        if (opts.emailService?.isConfigured()) {
+        const emailSvc = opts.emailService;
+        if (emailSvc?.isConfigured()) {
           void (async () => {
             try {
               const userRows = await db
@@ -1332,7 +1332,7 @@ export function issueService(db: Db) {
               const user = userRows[0];
               if (!user?.email) return;
               const issueUrl = `${opts.baseUrl}/issues/${opts.issueIdentifier ?? opts.issueId}`;
-              await opts.emailService!.sendMentionEmail(user.email, {
+              await emailSvc.sendMentionEmail(user.email, {
                 issueTitle: opts.issueTitle,
                 issueUrl,
                 snippet: opts.body.slice(0, 200),
