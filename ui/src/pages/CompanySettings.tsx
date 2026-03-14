@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -6,9 +6,10 @@ import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check } from "lucide-react";
+import { Settings, Check, Upload } from "lucide-react";
 import { ROLE_PRESETS, MEMBERSHIP_ROLES, type MembershipRole } from "@paperclipai/shared";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
+import { AvatarCropDialog } from "../components/AvatarCropDialog";
 import { MembersSection } from "../components/MembersSection";
 import {
   Field,
@@ -36,6 +37,10 @@ export function CompanySettings() {
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
   const [brandColor, setBrandColor] = useState("");
+
+  // Logo upload
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoCropFile, setLogoCropFile] = useState<File | null>(null);
 
   // Sync local state from selected company
   useEffect(() => {
@@ -75,6 +80,13 @@ export function CompanySettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
     }
+  });
+
+  const logoMutation = useMutation({
+    mutationFn: (file: File) => companiesApi.uploadLogo(selectedCompanyId!, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+    },
   });
 
   const settingsMutation = useMutation({
@@ -287,6 +299,7 @@ export function CompanySettings() {
               <CompanyPatternIcon
                 companyName={companyName || selectedCompany.name}
                 brandColor={brandColor || null}
+                imageUrl={selectedCompany.image}
                 className="rounded-[14px]"
               />
             </div>
@@ -328,6 +341,57 @@ export function CompanySettings() {
               </Field>
             </div>
           </div>
+
+          {/* Logo upload */}
+          <Field
+            label="Company Logo"
+            hint="Upload a logo image (PNG, JPG, or WebP, max 2MB). Replaces the pattern icon."
+          >
+            <div className="flex items-center gap-3">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setLogoCropFile(file);
+                  e.target.value = "";
+                }}
+              />
+              <AvatarCropDialog
+                file={logoCropFile}
+                onConfirm={(blob) => {
+                  const file = new File([blob], "logo.png", { type: "image/png" });
+                  logoMutation.mutate(file);
+                  setLogoCropFile(null);
+                }}
+                onCancel={() => setLogoCropFile(null)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={logoMutation.isPending}
+              >
+                <Upload className="h-4 w-4 mr-1.5" />
+                {logoMutation.isPending ? "Uploading..." : "Change Logo"}
+              </Button>
+              {logoMutation.isSuccess && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Check className="h-3 w-3" />
+                  Logo updated
+                </span>
+              )}
+              {logoMutation.isError && (
+                <span className="text-xs text-destructive">
+                  {logoMutation.error instanceof Error
+                    ? logoMutation.error.message
+                    : "Failed to upload logo"}
+                </span>
+              )}
+            </div>
+          </Field>
         </div>
       </div>
 

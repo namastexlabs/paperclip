@@ -11,6 +11,7 @@ const BAYER_4X4 = [
 interface CompanyPatternIconProps {
   companyName: string;
   brandColor?: string | null;
+  imageUrl?: string | null;
   className?: string;
 }
 
@@ -159,12 +160,29 @@ function makeCompanyPatternDataUrl(seed: string, brandColor?: string | null, log
   return canvas.toDataURL("image/png");
 }
 
-export function CompanyPatternIcon({ companyName, brandColor, className }: CompanyPatternIconProps) {
+export function CompanyPatternIcon({ companyName, brandColor, imageUrl, className }: CompanyPatternIconProps) {
   const initial = companyName.trim().charAt(0).toUpperCase() || "?";
   const patternDataUrl = useMemo(
-    () => makeCompanyPatternDataUrl(companyName.trim().toLowerCase(), brandColor),
-    [companyName, brandColor],
+    () => (imageUrl ? "" : makeCompanyPatternDataUrl(companyName.trim().toLowerCase(), brandColor)),
+    [companyName, brandColor, imageUrl],
   );
+
+  if (imageUrl) {
+    return (
+      <div
+        className={cn(
+          "relative flex items-center justify-center w-11 h-11 overflow-hidden",
+          className,
+        )}
+      >
+        <img
+          src={imageUrl}
+          alt={companyName}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
 
   return (
     <div

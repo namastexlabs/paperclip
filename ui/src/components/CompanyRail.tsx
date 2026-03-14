@@ -133,6 +133,7 @@ function SortableCompanyItem({
               <CompanyPatternIcon
                 companyName={company.name}
                 brandColor={company.brandColor}
+                imageUrl={company.image}
                 className={cn(
                   isSelected
                     ? "rounded-[14px]"

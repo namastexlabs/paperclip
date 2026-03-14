@@ -25,6 +25,11 @@ export const companiesApi = {
       >
     >,
   ) => api.patch<Company>(`/companies/${companyId}`, data),
+  uploadLogo: (companyId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.postForm<{ logoUrl: string }>(`/companies/${companyId}/logo`, form);
+  },
   archive: (companyId: string) => api.post<Company>(`/companies/${companyId}/archive`, {}),
   remove: (companyId: string) => api.delete<{ ok: true }>(`/companies/${companyId}`),
   exportBundle: (companyId: string, data: { include?: { company?: boolean; agents?: boolean } }) =>
