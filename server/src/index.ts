@@ -483,6 +483,8 @@ export async function startServer(): Promise<StartedServer> {
     resendApiKey: config.emailResendApiKey,
     fromAddress: config.emailFromAddress,
   });
+  // Create bare HTTP server first so it can be passed to Vite HMR config,
+  // then attach Express app as request handler after createApp returns.
   const server = createServer();
   const app = await createApp(db as any, {
     uiMode,
@@ -499,7 +501,7 @@ export async function startServer(): Promise<StartedServer> {
     resolveSession,
     httpServer: server,
   });
-  server.on("request", app as unknown as Parameters<typeof server.on>[1]);
+  server.on("request", app);
   
   if (listenPort !== config.port) {
     logger.warn(`Requested port is busy; using next free port (requestedPort=${config.port}, selectedPort=${listenPort})`);
