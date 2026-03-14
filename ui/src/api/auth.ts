@@ -1,6 +1,6 @@
 export type AuthSession = {
   session: { id: string; userId: string };
-  user: { id: string; email: string | null; name: string | null };
+  user: { id: string; email: string | null; name: string | null; image: string | null };
 };
 
 function toSession(value: unknown): AuthSession | null {
@@ -20,6 +20,7 @@ function toSession(value: unknown): AuthSession | null {
       id: user.id,
       email: typeof user.email === "string" ? user.email : null,
       name: typeof user.name === "string" ? user.name : null,
+      image: typeof user.image === "string" ? user.image : null,
     },
   };
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Paperclip, Plus } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
+import { Paperclip, Plus, User, LogOut } from "lucide-react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   closestCenter,
@@ -16,17 +16,28 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useNavigate } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { cn } from "../lib/utils";
 import { queryKeys } from "../lib/queryKeys";
 import { sidebarBadgesApi } from "../api/sidebarBadges";
 import { heartbeatsApi } from "../api/heartbeats";
+import { authApi } from "../api/auth";
+import { healthApi } from "../api/health";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Company } from "@paperclipai/shared";
 import { CompanyPatternIcon } from "./CompanyPatternIcon";
 
@@ -148,6 +159,83 @@ function SortableCompanyItem({
         </TooltipContent>
       </Tooltip>
     </div>
+  );
+}
+
+function deriveInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function UserRailAvatar() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { selectedCompany } = useCompany();
+
+  const { data: health } = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+    enabled: health?.deploymentMode === "authenticated",
+    retry: false,
+  });
+
+  if (health?.deploymentMode !== "authenticated") return null;
+  if (!session?.user) return null;
+
+  const userName = session.user.name || "User";
+  const initials = deriveInitials(userName);
+  const avatarUrl = session.user.image || null;
+
+  async function handleSignOut() {
+    try {
+      await authApi.signOut();
+    } catch {
+      // ignore
+    }
+    queryClient.clear();
+    navigate("/auth");
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center justify-center cursor-pointer rounded-full transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`User menu for ${userName}`}
+        >
+          <Avatar size="default">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={userName} />}
+            <AvatarFallback>{initials}</AvatarFallback>
+          </Avatar>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-56">
+        <div className="px-2 py-1.5">
+          <p className="text-sm font-medium">{userName}</p>
+          {session.user.email && (
+            <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+          )}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigate(selectedCompany ? `/${selectedCompany.issuePrefix}/account` : "/account")}>
+          <User className="h-4 w-4 mr-2" />
+          Account Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSignOut}>
+          <LogOut className="h-4 w-4 mr-2" />
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -311,6 +399,11 @@ export function CompanyRail() {
             <p>Add company</p>
           </TooltipContent>
         </Tooltip>
+      </div>
+
+      {/* User avatar */}
+      <div className="flex items-center justify-center pb-3 shrink-0">
+        <UserRailAvatar />
       </div>
     </div>
   );
