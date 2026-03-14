@@ -6,11 +6,11 @@ import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check, Upload } from "lucide-react";
+import { Settings, Check } from "lucide-react";
 import { ROLE_PRESETS, MEMBERSHIP_ROLES, type MembershipRole } from "@paperclipai/shared";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
-import { AvatarCropDialog } from "../components/AvatarCropDialog";
 import { MembersSection } from "../components/MembersSection";
+import { AvatarCropDialog } from "../components/AvatarCropDialog";
 import {
   Field,
   ToggleField,
@@ -32,15 +32,15 @@ export function CompanySettings() {
   } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Logo crop state
+  const [logoCropFile, setLogoCropFile] = useState<File | null>(null);
 
   // General settings local state
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
   const [brandColor, setBrandColor] = useState("");
-
-  // Logo upload
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const [logoCropFile, setLogoCropFile] = useState<File | null>(null);
 
   // Sync local state from selected company
   useEffect(() => {
@@ -82,7 +82,7 @@ export function CompanySettings() {
     }
   });
 
-  const logoMutation = useMutation({
+  const uploadLogoMutation = useMutation({
     mutationFn: (file: File) => companiesApi.uploadLogo(selectedCompanyId!, file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
@@ -252,6 +252,18 @@ export function CompanySettings() {
     });
   }
 
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) setLogoCropFile(file);
+    e.target.value = "";
+  }
+
+  function handleLogoCropConfirm(blob: Blob) {
+    const file = new File([blob], "logo.jpg", { type: "image/jpeg" });
+    uploadLogoMutation.mutate(file);
+    setLogoCropFile(null);
+  }
+
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-2">
@@ -299,11 +311,28 @@ export function CompanySettings() {
               <CompanyPatternIcon
                 companyName={companyName || selectedCompany.name}
                 brandColor={brandColor || null}
-                imageUrl={selectedCompany.image}
+                imageUrl={selectedCompany.image ?? null}
                 className="rounded-[14px]"
               />
             </div>
             <div className="flex-1 space-y-2">
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={uploadLogoMutation.isPending}
+                >
+                  {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
+                </Button>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleLogoChange}
+                />
+              </div>
               <Field
                 label="Brand color"
                 hint="Sets the hue for the company icon. Leave empty for auto-generated color."
@@ -341,57 +370,6 @@ export function CompanySettings() {
               </Field>
             </div>
           </div>
-
-          {/* Logo upload */}
-          <Field
-            label="Company Logo"
-            hint="Upload a logo image (PNG, JPG, or WebP, max 2MB). Replaces the pattern icon."
-          >
-            <div className="flex items-center gap-3">
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setLogoCropFile(file);
-                  e.target.value = "";
-                }}
-              />
-              <AvatarCropDialog
-                file={logoCropFile}
-                onConfirm={(blob) => {
-                  const file = new File([blob], "logo.png", { type: "image/png" });
-                  logoMutation.mutate(file);
-                  setLogoCropFile(null);
-                }}
-                onCancel={() => setLogoCropFile(null)}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => logoInputRef.current?.click()}
-                disabled={logoMutation.isPending}
-              >
-                <Upload className="h-4 w-4 mr-1.5" />
-                {logoMutation.isPending ? "Uploading..." : "Change Logo"}
-              </Button>
-              {logoMutation.isSuccess && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Check className="h-3 w-3" />
-                  Logo updated
-                </span>
-              )}
-              {logoMutation.isError && (
-                <span className="text-xs text-destructive">
-                  {logoMutation.error instanceof Error
-                    ? logoMutation.error.message
-                    : "Failed to upload logo"}
-                </span>
-              )}
-            </div>
-          </Field>
         </div>
       </div>
 
@@ -612,6 +590,14 @@ export function CompanySettings() {
 
       {/* Members */}
       <MembersSection companyId={selectedCompanyId!} />
+
+      {/* Logo crop dialog */}
+      <AvatarCropDialog
+        file={logoCropFile}
+        onConfirm={handleLogoCropConfirm}
+        onCancel={() => setLogoCropFile(null)}
+        title="Crop Logo"
+      />
 
       {/* Danger Zone */}
       <div className="space-y-4">

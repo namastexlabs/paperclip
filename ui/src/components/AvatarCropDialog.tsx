@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import {
@@ -14,6 +14,7 @@ interface AvatarCropDialogProps {
   file: File | null;
   onConfirm: (blob: Blob) => void;
   onCancel: () => void;
+  title?: string;
 }
 
 async function createCroppedBlob(
@@ -42,6 +43,7 @@ async function createCroppedBlob(
         pixelCrop.width,
         pixelCrop.height
       );
+      // Use JPEG at 0.9 quality to keep file size reasonable
       canvas.toBlob(
         (blob) => {
           if (blob) {
@@ -50,7 +52,8 @@ async function createCroppedBlob(
             reject(new Error("Canvas toBlob returned null"));
           }
         },
-        "image/png"
+        "image/jpeg",
+        0.9
       );
     });
     image.addEventListener("error", () => reject(new Error("Failed to load image")));
@@ -58,12 +61,23 @@ async function createCroppedBlob(
   });
 }
 
-export function AvatarCropDialog({ file, onConfirm, onCancel }: AvatarCropDialogProps) {
+export function AvatarCropDialog({ file, onConfirm, onCancel, title }: AvatarCropDialogProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
-  const imageSrc = file ? URL.createObjectURL(file) : null;
+  // Create object URL only when file changes; revoke on cleanup to prevent memory leaks
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setImageSrc(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setImageSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
     setCroppedAreaPixels(croppedAreaPixels);
@@ -89,7 +103,7 @@ export function AvatarCropDialog({ file, onConfirm, onCancel }: AvatarCropDialog
     <Dialog open={!!file} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Crop Avatar</DialogTitle>
+          <DialogTitle>{title ?? "Crop Avatar"}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">

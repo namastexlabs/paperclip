@@ -168,7 +168,7 @@ export function Account() {
   }
 
   function handleCropConfirm(blob: Blob) {
-    const file = new File([blob], "avatar.png", { type: "image/png" });
+    const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
     uploadAvatar.mutate(file);
     setCropFile(null);
   }
