@@ -116,6 +116,82 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeMentionName(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+type MentionNameGroup = {
+  name: string;
+  agentIds: string[];
+  userIds: string[];
+};
+
+function groupMentionNames(
+  candidates: Array<{ id: string; name: string | null; kind: "agent" | "user" }>,
+): MentionNameGroup[] {
+  const groups = new Map<string, MentionNameGroup>();
+
+  for (const candidate of candidates) {
+    const normalized = normalizeMentionName(candidate.name ?? "");
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    const existing = groups.get(key);
+    if (existing) {
+      if (candidate.kind === "agent") {
+        existing.agentIds.push(candidate.id);
+      } else {
+        existing.userIds.push(candidate.id);
+      }
+      continue;
+    }
+    groups.set(key, {
+      name: normalized,
+      agentIds: candidate.kind === "agent" ? [candidate.id] : [],
+      userIds: candidate.kind === "user" ? [candidate.id] : [],
+    });
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    const byLength = b.name.length - a.name.length;
+    if (byLength !== 0) return byLength;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function findMentionIds(body: string, groups: MentionNameGroup[]): { agentIds: string[]; userIds: string[] } {
+  const mentionedAgentIds = new Set<string>();
+  const mentionedUserIds = new Set<string>();
+  const occupiedRanges: Array<{ start: number; end: number }> = [];
+
+  for (const group of groups) {
+    const pattern = new RegExp(
+      `(^|[^\\w@])@${escapeRegExp(group.name)}(?=$|[\\s),.!?:;\\]}])`,
+      "gi",
+    );
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(body)) !== null) {
+      const leading = match[1] ?? "";
+      const start = match.index + leading.length;
+      const end = start + 1 + group.name.length;
+      const overlapsExisting = occupiedRanges.some((range) => start < range.end && end > range.start);
+      if (overlapsExisting) continue;
+      occupiedRanges.push({ start, end });
+      for (const id of group.agentIds) {
+        mentionedAgentIds.add(id);
+      }
+      for (const id of group.userIds) {
+        mentionedUserIds.add(id);
+      }
+    }
+  }
+
+  return { agentIds: [...mentionedAgentIds], userIds: [...mentionedUserIds] };
+}
+
 function touchedByUserCondition(companyId: string, userId: string) {
   return sql<boolean>`
     (
@@ -439,20 +515,10 @@ export function issueService(db: Db) {
   }
 
   async function findMentionsInner(companyId: string, body: string): Promise<{ agentIds: string[]; userIds: string[] }> {
-    const re = /\B@([^\s@,!?.]+)/g;
-    const tokens = new Set<string>();
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(body)) !== null) tokens.add(m[1].toLowerCase());
-    if (tokens.size === 0) return { agentIds: [], userIds: [] };
+    if (!body.includes("@")) return { agentIds: [], userIds: [] };
 
     const agentRows = await db.select({ id: agents.id, name: agents.name })
       .from(agents).where(eq(agents.companyId, companyId));
-    const agentIds = agentRows.filter(a => {
-      const nameLower = a.name.toLowerCase();
-      if (tokens.has(nameLower)) return true;
-      const nameParts = nameLower.split(/\s+/);
-      return nameParts.some(part => tokens.has(part));
-    }).map(a => a.id);
 
     const userRows = await db
       .select({ id: authUsers.id, name: authUsers.name })
@@ -462,17 +528,17 @@ export function issueService(db: Db) {
         and(
           eq(companyMemberships.companyId, companyId),
           eq(companyMemberships.principalType, "user"),
+          eq(companyMemberships.status, "active"),
         ),
       );
-    const userIds = userRows.filter(u => {
-      if (!u.name) return false;
-      const nameLower = u.name.toLowerCase();
-      if (tokens.has(nameLower)) return true;
-      const nameParts = nameLower.split(/\s+/);
-      return nameParts.some(part => tokens.has(part));
-    }).map(u => u.id);
 
-    return { agentIds, userIds };
+    return findMentionIds(
+      body,
+      groupMentionNames([
+        ...agentRows.map((row) => ({ ...row, kind: "agent" as const })),
+        ...userRows.map((row) => ({ ...row, kind: "user" as const })),
+      ]),
+    );
   }
 
   return {

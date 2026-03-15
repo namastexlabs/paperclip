@@ -58,6 +58,15 @@ const mockIssueApprovalService = vi.hoisted(() => ({
   link: vi.fn(),
 }));
 
+const mockDocumentService = vi.hoisted(() => ({
+  getIssueDocumentPayload: vi.fn(),
+  listIssueDocuments: vi.fn(),
+  getIssueDocumentByKey: vi.fn(),
+  upsertIssueDocument: vi.fn(),
+  listIssueDocumentRevisions: vi.fn(),
+  deleteIssueDocument: vi.fn(),
+}));
+
 const mockLogActivity = vi.hoisted(() => vi.fn());
 
 vi.mock("../../services/index.js", () => ({
@@ -68,6 +77,7 @@ vi.mock("../../services/index.js", () => ({
   projectService: () => mockProjectService,
   goalService: () => mockGoalService,
   issueApprovalService: () => mockIssueApprovalService,
+  documentService: () => mockDocumentService,
   logActivity: mockLogActivity,
 }));
 

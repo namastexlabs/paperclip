@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { getTestDb, cleanDb, type TestDb } from "../helpers/test-db.js";
 import { issueService } from "../../services/issues.js";
-import { companies, agents, heartbeatRuns } from "@paperclipai/db";
+import { companies, agents, authUsers, companyMemberships, heartbeatRuns } from "@paperclipai/db";
 import { randomUUID } from "node:crypto";
 
 describe("issueService", () => {
@@ -230,6 +230,63 @@ describe("issueService", () => {
       const issue = await svc().create(companyId, { title: "Assign me", status: "todo" });
       const updated = await svc().update(issue.id, { assigneeAgentId: agentId });
       expect(updated!.assigneeAgentId).toBe(agentId);
+    });
+  });
+
+  describe("findMentions", () => {
+    it("matches exact multi-word mentions without falling back to shorter prefix names", async () => {
+      const [shortNameAgent] = await testDb.db
+        .insert(agents)
+        .values({
+          companyId,
+          name: "Genie",
+          role: "general",
+          adapterType: "process",
+          budgetMonthlyCents: 0,
+          spentMonthlyCents: 0,
+          status: "idle",
+        })
+        .returning();
+
+      const [fullNameAgent] = await testDb.db
+        .insert(agents)
+        .values({
+          companyId,
+          name: "Genie DevRel",
+          role: "general",
+          adapterType: "process",
+          budgetMonthlyCents: 0,
+          spentMonthlyCents: 0,
+          status: "idle",
+        })
+        .returning();
+
+      const userId = `user-${randomUUID()}`;
+      const now = new Date();
+      await testDb.db.insert(authUsers).values({
+        id: userId,
+        name: "Genie Bot",
+        email: "genie.bot@example.com",
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await testDb.db.insert(companyMemberships).values({
+        companyId,
+        principalType: "user",
+        principalId: userId,
+        status: "active",
+        membershipRole: "contributor",
+      });
+
+      const mentions = await svc().findMentions(
+        companyId,
+        "Please sync with @Genie DevRel and @Genie Bot today.",
+      );
+
+      expect(mentions.agentIds).toContain(fullNameAgent.id);
+      expect(mentions.agentIds).not.toContain(shortNameAgent.id);
+      expect(mentions.userIds).toEqual([userId]);
     });
   });
 });
