@@ -6,11 +6,26 @@ import {
   SquarePen,
   Users,
   Inbox,
+  User,
+  LogOut,
 } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { cn } from "../lib/utils";
 import { useInboxBadge } from "../hooks/useInboxBadge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@/lib/router";
+import { authApi } from "../api/auth";
+import { healthApi } from "../api/health";
+import { queryKeys } from "../lib/queryKeys";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface MobileBottomNavProps {
   visible: boolean;
@@ -33,11 +48,40 @@ interface MobileNavActionItem {
 
 type MobileNavItem = MobileNavLinkItem | MobileNavActionItem;
 
+function deriveInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
 export function MobileBottomNav({ visible }: MobileBottomNavProps) {
   const location = useLocation();
   const { selectedCompanyId } = useCompany();
   const { openNewIssue } = useDialog();
   const inboxBadge = useInboxBadge(selectedCompanyId);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const { data: health } = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+    enabled: health?.deploymentMode === "authenticated",
+    retry: false,
+  });
+
+  const isAuthenticated = health?.deploymentMode === "authenticated" && !!session?.user;
+
+  async function handleSignOut() {
+    try { await authApi.signOut(); } catch { /* ignore */ }
+    queryClient.clear();
+    navigate("/auth");
+  }
 
   const items = useMemo<MobileNavItem[]>(
     () => [
@@ -64,7 +108,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
       )}
       aria-label="Mobile navigation"
     >
-      <div className="grid h-16 grid-cols-5 px-1">
+      <div className={cn("grid h-16 px-1", isAuthenticated ? "grid-cols-6" : "grid-cols-5")}>
         {items.map((item) => {
           if (item.type === "action") {
             const Icon = item.icon;
@@ -117,6 +161,41 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
             </NavLink>
           );
         })}
+        {isAuthenticated && session?.user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="User menu"
+              >
+                <Avatar size="xs">
+                  {session.user.image && <AvatarImage src={session.user.image} alt={session.user.name || "User"} />}
+                  <AvatarFallback className="text-[8px]">{deriveInitials(session.user.name || "User")}</AvatarFallback>
+                </Avatar>
+                <span className="truncate">Me</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="end" sideOffset={8} className="w-48">
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium">{session.user.name || "User"}</p>
+                {session.user.email && (
+                  <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+                )}
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate(`/account`)}>
+                <User className="h-4 w-4 mr-2" />
+                Account Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </nav>
   );
