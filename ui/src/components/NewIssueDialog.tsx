@@ -314,6 +314,16 @@ export function NewIssueDialog() {
         kind: "agent",
       });
     }
+    const activeMembers = [...(people ?? [])]
+      .filter((p) => p.status === "active")
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    for (const member of activeMembers) {
+      options.push({
+        id: `user:${member.id}`,
+        name: member.name || member.email || member.id.slice(0, 8),
+        kind: "user",
+      });
+    }
     for (const project of orderedProjects) {
       options.push({
         id: `project:${project.id}`,
@@ -324,7 +334,7 @@ export function NewIssueDialog() {
       });
     }
     return options;
-  }, [agents, orderedProjects]);
+  }, [agents, people, orderedProjects]);
 
   const { data: assigneeAdapterModels } = useQuery({
     queryKey:
