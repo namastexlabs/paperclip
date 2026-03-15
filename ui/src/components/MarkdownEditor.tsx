@@ -368,10 +368,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
   }, [decorateProjectMentions, value]);
 
   const selectMention = useCallback(
-    (option: MentionOption) => {
-      // Read from ref to avoid stale-closure issues (selectionchange can
-      // update state between the last render and this callback firing).
-      const state = mentionStateRef.current;
+    (option: MentionOption, stateOverride?: MentionState | null) => {
+      // Prefer an explicit stateOverride (passed at render time before the ref
+      // is cleared by a selectionchange event) then fall back to the ref.
+      const state = stateOverride !== undefined ? stateOverride : mentionStateRef.current;
       if (!state) return;
 
       if (option.kind === "project" && option.projectId) {
@@ -494,7 +494,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
         }
 
         // Mention keyboard handling
-        if (mentionActive) {
+        // Use the ref as the authoritative source: in Dialog contexts React
+        // state may lag a render behind, but the ref is always current.
+        if (mentionActive || (mentionStateRef.current !== null && mentions && mentions.length > 0)) {
           // Space dismisses the popup (let the character be typed normally)
           if (e.key === " ") {
             mentionStateRef.current = null;
@@ -509,12 +511,22 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             setMentionState(null);
             return;
           }
-          // Arrow / Enter / Tab only when there are filtered results
-          if (filteredMentions.length > 0) {
+          // Arrow / Enter / Tab only when there are filtered results.
+          // When React state lags (Dialog context), fall back to computing
+          // from the ref so keyboard selection still works.
+          const effectiveMentions = filteredMentions.length > 0
+            ? filteredMentions
+            : (() => {
+                const refState = mentionStateRef.current;
+                if (!refState || !mentions) return [];
+                const q = refState.query.toLowerCase();
+                return mentions.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 8);
+              })();
+          if (effectiveMentions.length > 0) {
             if (e.key === "ArrowDown") {
               e.preventDefault();
               e.stopPropagation();
-              setMentionIndex((prev) => Math.min(prev + 1, filteredMentions.length - 1));
+              setMentionIndex((prev) => Math.min(prev + 1, effectiveMentions.length - 1));
               return;
             }
             if (e.key === "ArrowUp") {
@@ -526,7 +538,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             if (e.key === "Enter" || e.key === "Tab") {
               e.preventDefault();
               e.stopPropagation();
-              selectMention(filteredMentions[mentionIndex]);
+              selectMention(effectiveMentions[mentionIndex], mentionStateRef.current);
               return;
             }
           }
@@ -584,7 +596,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
               )}
               onMouseDown={(e) => {
                 e.preventDefault(); // prevent blur
-                selectMention(option);
+                selectMention(option, mentionState);
               }}
               onMouseEnter={() => setMentionIndex(i)}
             >
