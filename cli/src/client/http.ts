@@ -20,17 +20,20 @@ interface RequestOptions {
 interface ApiClientOptions {
   apiBase: string;
   apiKey?: string;
+  sessionToken?: string;
   runId?: string;
 }
 
 export class PaperclipApiClient {
   readonly apiBase: string;
   readonly apiKey?: string;
+  readonly sessionToken?: string;
   readonly runId?: string;
 
   constructor(opts: ApiClientOptions) {
     this.apiBase = opts.apiBase.replace(/\/+$/, "");
     this.apiKey = opts.apiKey?.trim() || undefined;
+    this.sessionToken = opts.sessionToken?.trim() || undefined;
     this.runId = opts.runId?.trim() || undefined;
   }
 
@@ -56,6 +59,29 @@ export class PaperclipApiClient {
     return this.request<T>(path, { method: "DELETE" }, opts);
   }
 
+  async rawPost(path: string, body?: unknown): Promise<Response> {
+    const url = buildUrl(this.apiBase, path);
+    const headers: Record<string, string> = {
+      accept: "application/json",
+    };
+    if (body !== undefined) {
+      headers["content-type"] = "application/json";
+    }
+    if (this.apiKey) {
+      headers.authorization = `Bearer ${this.apiKey}`;
+    } else if (this.sessionToken) {
+      headers.cookie = `better-auth.session_token=${this.sessionToken}`;
+    }
+    if (this.runId) {
+      headers["x-paperclip-run-id"] = this.runId;
+    }
+    return fetch(url, {
+      method: "POST",
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
   private async request<T>(path: string, init: RequestInit, opts?: RequestOptions): Promise<T | null> {
     const url = buildUrl(this.apiBase, path);
 
@@ -70,6 +96,8 @@ export class PaperclipApiClient {
 
     if (this.apiKey) {
       headers.authorization = `Bearer ${this.apiKey}`;
+    } else if (this.sessionToken) {
+      headers.cookie = `better-auth.session_token=${this.sessionToken}`;
     }
 
     if (this.runId) {

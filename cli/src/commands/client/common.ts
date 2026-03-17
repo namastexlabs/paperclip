@@ -56,7 +56,10 @@ export function resolveCommandContext(
   const apiKey =
     options.apiKey?.trim() ||
     process.env.PAPERCLIP_API_KEY?.trim() ||
-    readKeyFromProfileEnv(profile);
+    readKeyFromProfileEnv(profile) ||
+    profile.apiKey;
+
+  const sessionToken = profile.sessionToken;
 
   const companyId =
     options.companyId?.trim() ||
@@ -69,7 +72,7 @@ export function resolveCommandContext(
     );
   }
 
-  const api = new PaperclipApiClient({ apiBase, apiKey });
+  const api = new PaperclipApiClient({ apiBase, apiKey, sessionToken });
   return {
     api,
     companyId,

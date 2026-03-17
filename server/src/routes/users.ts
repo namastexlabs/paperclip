@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import multer from "multer";
 import { and, eq, gt } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { authUsers, authAccounts, authSessions, authVerifications, companyMemberships } from "@paperclipai/db";
+import { authUsers, authAccounts, authSessions, authVerifications, companyMemberships, companies } from "@paperclipai/db";
 import { createHash, randomBytes } from "node:crypto";
 import type { StorageService } from "../storage/types.js";
 import type { EmailService } from "../services/email.js";
@@ -58,19 +58,27 @@ export function userRoutes(db: Db, storageService: StorageService) {
       return;
     }
 
-    // Get company memberships
+    // Get company memberships with company names
     const memberships = await db
       .select({
         companyId: companyMemberships.companyId,
+        companyName: companies.name,
         membershipRole: companyMemberships.membershipRole,
         status: companyMemberships.status,
       })
       .from(companyMemberships)
+      .innerJoin(companies, eq(companies.id, companyMemberships.companyId))
       .where(eq(companyMemberships.principalId, userId));
 
     res.json({
       ...user,
       memberships,
+      companies: memberships.map((m) => ({
+        id: m.companyId,
+        name: m.companyName,
+        role: m.membershipRole,
+      })),
+      authSource: req.actor.source ?? null,
     });
   });
 

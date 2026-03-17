@@ -9,6 +9,8 @@ export interface ClientContextProfile {
   apiBase?: string;
   companyId?: string;
   apiKeyEnvVarName?: string;
+  apiKey?: string;
+  sessionToken?: string;
 }
 
 export interface ClientContext {
@@ -71,6 +73,8 @@ function normalizeProfile(value: unknown): ClientContextProfile {
     apiBase: toStringOrUndefined(profile.apiBase),
     companyId: toStringOrUndefined(profile.companyId),
     apiKeyEnvVarName: toStringOrUndefined(profile.apiKeyEnvVarName),
+    apiKey: toStringOrUndefined(profile.apiKey),
+    sessionToken: toStringOrUndefined(profile.sessionToken),
   };
 }
 
@@ -147,6 +151,12 @@ export function upsertProfile(
   }
   if (patch.apiKeyEnvVarName !== undefined && patch.apiKeyEnvVarName.trim().length === 0) {
     delete merged.apiKeyEnvVarName;
+  }
+  if (patch.apiKey !== undefined && patch.apiKey.trim().length === 0) {
+    delete merged.apiKey;
+  }
+  if (patch.sessionToken !== undefined && patch.sessionToken.trim().length === 0) {
+    delete merged.sessionToken;
   }
 
   context.profiles[profileName] = merged;
