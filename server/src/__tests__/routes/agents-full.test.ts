@@ -78,6 +78,7 @@ vi.mock("../../services/index.js", () => ({
   agentService: () => mockAgentService,
   accessService: () => mockAccessService,
   approvalService: () => mockApprovalService,
+  budgetService: () => ({}),
   heartbeatService: () => mockHeartbeatService,
   issueApprovalService: () => mockIssueApprovalService,
   issueService: () => mockIssueService,

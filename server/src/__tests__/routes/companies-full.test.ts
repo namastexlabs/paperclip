@@ -33,6 +33,7 @@ vi.mock("../../services/index.js", () => ({
   companyService: () => mockCompanyService,
   accessService: () => mockAccessService,
   companyPortabilityService: () => mockCompanyPortabilityService,
+  budgetService: () => ({}),
   logActivity: mockLogActivity,
 }));
 

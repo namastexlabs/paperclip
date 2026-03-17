@@ -22,10 +22,17 @@ const mockAgentService = vi.hoisted(() => ({
 
 const mockLogActivity = vi.hoisted(() => vi.fn());
 
+const mockHeartbeatService = vi.hoisted(() => ({
+  cancelBudgetScopeWork: vi.fn(),
+}));
+
 vi.mock("../../services/index.js", () => ({
+  budgetService: () => ({ updateCompanyBudget: vi.fn(), updateAgentBudget: vi.fn(), getPolicy: vi.fn(), upsertPolicy: vi.fn(), resolveIncident: vi.fn() }),
   costService: () => mockCostService,
+  financeService: () => ({ createEvent: vi.fn(), list: vi.fn() }),
   companyService: () => mockCompanyService,
   agentService: () => mockAgentService,
+  heartbeatService: () => mockHeartbeatService,
   logActivity: mockLogActivity,
 }));
 
