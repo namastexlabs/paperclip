@@ -258,7 +258,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             // After MDXEditor inserts the image, ensure two newlines follow it
             // so the cursor isn't stuck right next to the image.
             setTimeout(() => {
-              const current = latestValueRef.current;
+              const current = latestValueRef.current ?? "";
               const escapedSrc = escapeRegExp(src);
               const updated = current.replace(
                 new RegExp(`(!\\[[^\\]]*\\]\\(${escapedSrc}\\))(?!\\n\\n)`, "g"),
@@ -266,7 +266,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
               );
               if (updated !== current) {
                 latestValueRef.current = updated;
-                ref.current?.setMarkdown(updated ?? "");
+                ref.current?.setMarkdown(updated);
                 onChange(updated);
                 requestAnimationFrame(() => {
                   ref.current?.focus(undefined, { defaultSelection: "rootEnd" });
@@ -391,11 +391,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
 
   const replaceMentionFromMarkdown = useCallback(
     (option: MentionOption, state: MentionState) => {
-      const current = latestValueRef.current;
+      const current = latestValueRef.current ?? "";
       const next = applyMention(current, state.query, option);
       if (next !== current) {
         latestValueRef.current = next;
-        ref.current?.setMarkdown(next ?? "");
+        ref.current?.setMarkdown(next);
         onChange(next);
         return true;
       }
