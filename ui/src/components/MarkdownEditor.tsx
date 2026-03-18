@@ -258,7 +258,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             // After MDXEditor inserts the image, ensure two newlines follow it
             // so the cursor isn't stuck right next to the image.
             setTimeout(() => {
-              const current = latestValueRef.current;
+              const current = latestValueRef.current ?? "";
               const escapedSrc = escapeRegExp(src);
               const updated = current.replace(
                 new RegExp(`(!\\[[^\\]]*\\]\\(${escapedSrc}\\))(?!\\n\\n)`, "g"),
@@ -304,7 +304,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
 
   useEffect(() => {
     if (value !== latestValueRef.current) {
-      ref.current?.setMarkdown(value);
+      ref.current?.setMarkdown(value ?? "");
       latestValueRef.current = value;
     }
   }, [value]);
@@ -391,7 +391,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
 
   const replaceMentionFromMarkdown = useCallback(
     (option: MentionOption, state: MentionState) => {
-      const current = latestValueRef.current;
+      const current = latestValueRef.current ?? "";
       const next = applyMention(current, state.query, option);
       if (next !== current) {
         latestValueRef.current = next;
@@ -572,7 +572,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     >
       <MDXEditor
         ref={ref}
-        markdown={value}
+        markdown={value ?? ""}
         placeholder={placeholder}
         onChange={(next) => {
           latestValueRef.current = next;

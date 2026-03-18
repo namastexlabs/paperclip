@@ -450,7 +450,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             <Field label="Capabilities" hint={help.capabilities}>
               <MarkdownEditor
                 value={eff("identity", "capabilities", props.agent.capabilities ?? "")}
-                onChange={(v) => mark("identity", "capabilities", v || null)}
+                onChange={(v) => mark("identity", "capabilities", v ?? null)}
                 placeholder="Describe what this agent can do..."
                 contentClassName="min-h-[44px] text-sm font-mono"
                 imageUploadHandler={async (file) => {
@@ -716,7 +716,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                         String(config.bootstrapPromptTemplate ?? ""),
                       )}
                       onChange={(v) =>
-                        mark("adapterConfig", "bootstrapPromptTemplate", v || undefined)
+                        mark("adapterConfig", "bootstrapPromptTemplate", v ?? undefined)
                       }
                       placeholder="Optional initial setup prompt for the first run"
                       contentClassName="min-h-[44px] text-sm font-mono"

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { ROLE_PRESETS, MEMBERSHIP_ROLES, type MembershipRole } from "@paperclipai/shared";
 import pc from "picocolors";
 import {
   addCommonClientOptions,
@@ -9,35 +10,7 @@ import {
   type BaseClientOptions,
 } from "./common.js";
 
-// ---------------------------------------------------------------------------
-// Role → permission grant mapping (mirrors ROLE_PRESETS in shared/constants)
-// ---------------------------------------------------------------------------
-
-const ROLE_PRESETS: Record<string, Array<{ permissionKey: string }>> = {
-  owner: [
-    { permissionKey: "users:invite" },
-    { permissionKey: "users:manage_permissions" },
-    { permissionKey: "agents:create" },
-    { permissionKey: "tasks:assign" },
-    { permissionKey: "tasks:assign_scope" },
-    { permissionKey: "joins:approve" },
-  ],
-  admin: [
-    { permissionKey: "users:invite" },
-    { permissionKey: "users:manage_permissions" },
-    { permissionKey: "agents:create" },
-    { permissionKey: "tasks:assign" },
-    { permissionKey: "tasks:assign_scope" },
-    { permissionKey: "joins:approve" },
-  ],
-  contributor: [
-    { permissionKey: "tasks:assign" },
-    { permissionKey: "tasks:assign_scope" },
-  ],
-  viewer: [],
-};
-
-const VALID_ROLES = Object.keys(ROLE_PRESETS);
+const VALID_ROLES: readonly string[] = MEMBERSHIP_ROLES;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -172,8 +145,8 @@ export function registerMemberCommands(program: Command): void {
 
             const memberId = match?.id ?? identifier;
 
-            const grants = (ROLE_PRESETS[role] ?? []).map((g) => ({
-              permissionKey: g.permissionKey,
+            const grants = (ROLE_PRESETS[role as MembershipRole] ?? []).map((k) => ({
+              permissionKey: k,
             }));
 
             const result = await ctx.api.patch<CompanyMember>(
