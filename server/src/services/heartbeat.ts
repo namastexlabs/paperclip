@@ -498,6 +498,13 @@ export function shouldResetTaskSessionForWake(
   return false;
 }
 
+export function formatRuntimeWorkspaceWarningLog(warning: string) {
+  return {
+    stream: "stdout" as const,
+    chunk: `[paperclip] ${warning}\n`,
+  };
+}
+
 function describeSessionResetReason(
   contextSnapshot: Record<string, unknown> | null | undefined,
 ) {
@@ -2087,7 +2094,8 @@ export function heartbeatService(db: Db) {
         });
       };
       for (const warning of runtimeWorkspaceWarnings) {
-        await onLog("stderr", `[paperclip] ${warning}\n`);
+        const logEntry = formatRuntimeWorkspaceWarningLog(warning);
+        await onLog(logEntry.stream, logEntry.chunk);
       }
       const adapterEnv = Object.fromEntries(
         Object.entries(parseObject(resolvedConfig.env)).filter(
