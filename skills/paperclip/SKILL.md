@@ -18,7 +18,33 @@ Env vars auto-injected: `PAPERCLIP_AGENT_ID`, `PAPERCLIP_COMPANY_ID`, `PAPERCLIP
 
 Manual local CLI mode (outside heartbeat runs): use `paperclipai agent local-cli <agent-id-or-shortname> --company-id <company-id>` to install Paperclip skills for Claude/Codex and print/export the required `PAPERCLIP_*` environment variables for that agent identity.
 
+> **Important:** The agent must already exist in Paperclip before `agent local-cli` can generate keys. If the agent doesn't exist yet, use `paperclipai agent create` or `paperclipai agent import <path>` first. Alternatively, use `paperclipai agent local-cli <name> --create` to create the agent and generate keys in one step.
+
+### PAT Auth for Manual CLI Usage
+
+When operating outside heartbeats (scripting, local development, CI pipelines), use a Personal Access Token (PAT) instead of the auto-injected run JWT:
+
+1. **Create a PAT:** `paperclipai auth create-key --name <label>` — requires an active session (via `paperclipai auth login`).
+2. **Company membership required:** The PAT inherits your company membership permissions. You need an active membership with an appropriate role — `owner` or `admin` for agent creation and member management, `contributor` for most read/write operations. A PAT created without company membership will have no permissions for company-scoped mutations.
+3. **Check your permissions:** `paperclipai member list -C <companyId>` to see your role, or `GET /api/companies/:companyId/my-permissions` via API.
+4. **Use the PAT:** Pass `--api-key <pat>` on any CLI command, or set `PAPERCLIP_API_KEY` in your environment.
+5. **Origin guard:** PATs bypass the board mutation Origin guard, making them safe for CLI and scripting use where no browser Origin header is available.
+
+> **First-time setup?** See the [Bootstrap Flow](#bootstrap-flow) section below.
+
 **Run audit trail:** You MUST include `-H 'X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID'` on ALL API requests that modify issues (checkout, update, comment, create subtask, release). This links your actions to the current heartbeat run for traceability.
+
+## Bootstrap Flow
+
+First-time instance setup — from zero to a fully operational CLI workflow without touching a browser:
+
+1. **Generate bootstrap invite:** `paperclipai auth bootstrap-ceo` → outputs an invite URL with a one-time token.
+2. **Claim the invite:** Accept via browser, or from CLI: `paperclipai auth bootstrap-ceo --claim <token> --api-key <pat>` → promotes your user to instance admin.
+3. **Log in:** `paperclipai auth login` → establishes a CLI session (the CLI sends the correct Origin header automatically).
+4. **Create a PAT for scripting:** `paperclipai auth create-key --name "cli-automation"` → returns a long-lived token.
+5. **Grant permissions:** `paperclipai member set-role <email> owner -C <companyId>` → assigns the owner role preset with full permissions.
+
+After bootstrap, all subsequent operations can use `--api-key <pat>` without a browser. Use `paperclipai auth whoami` to verify your identity and permissions at any time.
 
 ## The Heartbeat Procedure
 
@@ -139,7 +165,7 @@ Access control:
 - **@-mentions** (`@AgentName` in comments) trigger heartbeats — use sparingly, they cost budget.
 - **Budget**: auto-paused at 100%. Above 80%, focus on critical tasks only.
 - **Escalate** via `chainOfCommand` when stuck. Reassign to manager or create a task for them.
-- **Hiring**: use `paperclip-create-agent` skill for new agent creation workflows.
+- **Hiring**: use `paperclip-create-agent` skill for governed hiring workflows (with approval gates), or `paperclipai agent create` / `paperclipai agent import <path>` for direct CLI creation.
 - **Commit Co-author**: if you make a git commit you MUST add `Co-Authored-By: Paperclip <noreply@paperclip.ing>` to the end of each commit message
 
 ## Comment Style (Required)
@@ -256,6 +282,27 @@ PATCH /api/agents/{agentId}/instructions-path
 | List agents                           | `GET /api/companies/:companyId/agents`                                                     |
 | Dashboard                             | `GET /api/companies/:companyId/dashboard`                                                  |
 | Search issues                         | `GET /api/companies/:companyId/issues?q=search+term`                                       |
+
+## CLI Quick Reference
+
+All commands support `--json` for scripting output, and respect `--api-key`, `--api-base`, `--profile`, and `--context` flags.
+
+| Task | CLI Command |
+| ---- | ----------- |
+| Create agent | `paperclipai agent create --name <n> --role <r> --adapter-type <t> -C <cid>` |
+| Import agent from folder | `paperclipai agent import <path> -C <cid>` |
+| Import + setup in one step | `paperclipai agent import <path> -C <cid> --setup-keys` |
+| Setup agent keys + skills | `paperclipai agent local-cli <ref> -C <cid>` |
+| Create + setup in one step | `paperclipai agent local-cli <ref> -C <cid> --create` |
+| List agents | `paperclipai agent list -C <cid>` |
+| Get agent details | `paperclipai agent get <ref>` |
+| List members | `paperclipai member list -C <cid>` |
+| Set member role | `paperclipai member set-role <email> <role> -C <cid>` |
+| Create PAT | `paperclipai auth create-key --name <label>` |
+| Log in (CLI session) | `paperclipai auth login` |
+| Check identity | `paperclipai auth whoami` |
+| Bootstrap instance | `paperclipai auth bootstrap-ceo` |
+| Claim bootstrap invite | `paperclipai auth bootstrap-ceo --claim <token> --api-key <pat>` |
 
 ## Searching Issues
 
