@@ -6,6 +6,7 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import yaml from "js-yaml";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -219,30 +220,24 @@ function parseFrontmatter(content: string): Record<string, string> | null {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return null;
 
-  const result: Record<string, string> = {};
-  for (const line of match[1].split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const colonIdx = trimmed.indexOf(":");
-    if (colonIdx < 1) continue;
-    const key = trimmed.slice(0, colonIdx).trim();
-    let value = trimmed.slice(colonIdx + 1).trim();
-    // Strip surrounding quotes
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
+  try {
+    const parsed = yaml.load(match[1]);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    // Coerce all values to strings for downstream consumers
+    const result: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (value != null) result[key] = String(value);
     }
-    result[key] = value;
+    return Object.keys(result).length > 0 ? result : null;
+  } catch {
+    return null;
   }
-  return Object.keys(result).length > 0 ? result : null;
 }
 
 function tryParseJson(value: string): Record<string, unknown> | null {
-  if (!value.startsWith("{")) return null;
   try {
     const parsed = JSON.parse(value);
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
   } catch { /* not JSON */ }
   return null;
 }
@@ -305,9 +300,10 @@ async function parseAgentFolder(folderPath: string, overrides: {
     }
   }
 
-  // Fall back to SOUL.md for capabilities if no frontmatter capabilities
+  // Fall back to SOUL.md for capabilities if no frontmatter capabilities.
+  // Best-effort heuristic: uses the first non-heading, non-blockquote paragraph
+  // (truncated to 200 chars). Explicit `capabilities` in frontmatter takes priority.
   if (!result.capabilities && soulContent) {
-    // Use the first non-empty paragraph after the heading as capabilities
     const lines = soulContent.split("\n");
     for (const line of lines) {
       const trimmed = line.trim();
@@ -756,6 +752,19 @@ export function registerAgentCommands(program: Command): void {
                   pc.yellow(`Approval required: id=${hireResult.approval.id} status=${hireResult.approval.status}`),
                 );
               }
+            }
+
+            // If the agent is pending board approval, key creation will be
+            // rejected (409). Exit early and let the user retry after approval.
+            if (agentRow.status === "pending_approval") {
+              if (ctx.json) {
+                printOutput({ agent: { id: agentRow.id, name: agentRow.name, status: agentRow.status }, pendingApproval: true }, { json: true });
+              } else {
+                console.log(
+                  pc.yellow("Agent created but pending board approval. Run `agent local-cli` again after approval."),
+                );
+              }
+              return;
             }
           }
 
