@@ -63,6 +63,7 @@ export class PaperclipApiClient {
     const url = buildUrl(this.apiBase, path);
     const headers: Record<string, string> = {
       accept: "application/json",
+      origin: this.apiBase,
     };
     if (body !== undefined) {
       headers["content-type"] = "application/json";
@@ -87,6 +88,7 @@ export class PaperclipApiClient {
 
     const headers: Record<string, string> = {
       accept: "application/json",
+      origin: this.apiBase,
       ...toStringRecord(init.headers),
     };
 

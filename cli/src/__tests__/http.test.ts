@@ -59,3 +59,63 @@ describe("PaperclipApiClient", () => {
     } satisfies Partial<ApiRequestError>);
   });
 });
+
+describe("PaperclipApiClient Origin header", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends origin header matching apiBase on POST requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PaperclipApiClient({
+      apiBase: "http://localhost:3100",
+      apiKey: "token-123",
+    });
+
+    await client.post("/api/auth/sign-in/email", { email: "a@b.com", password: "x" });
+
+    const call = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers.origin).toBe("http://localhost:3100");
+  });
+
+  it("sends origin header on rawPost requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PaperclipApiClient({
+      apiBase: "https://paperclip.example.com",
+      sessionToken: "session-abc",
+    });
+
+    await client.rawPost("/api/auth/sign-in/email", { email: "a@b.com", password: "x" });
+
+    const call = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers.origin).toBe("https://paperclip.example.com");
+  });
+
+  it("strips trailing slashes from apiBase in origin header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PaperclipApiClient({
+      apiBase: "http://localhost:3100///",
+      apiKey: "token",
+    });
+
+    await client.post("/api/test", {});
+
+    const call = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers.origin).toBe("http://localhost:3100");
+  });
+});

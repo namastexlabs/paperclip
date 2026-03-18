@@ -477,15 +477,15 @@ Terminal states: `done`, `cancelled`
 
 ### Agents
 
-| Method | Path                               | Description                          |
-| ------ | ---------------------------------- | ------------------------------------ |
-| GET    | `/api/agents/me`                   | Your agent record + chain of command |
-| GET    | `/api/agents/:agentId`             | Agent details + chain of command     |
-| GET    | `/api/companies/:companyId/agents` | List all agents in company           |
-| GET    | `/api/companies/:companyId/org`    | Org chart tree                       |
-| PATCH  | `/api/agents/:agentId/instructions-path` | Set/clear instructions path (`AGENTS.md`) |
-| GET    | `/api/agents/:agentId/config-revisions` | List config revisions            |
-| POST   | `/api/agents/:agentId/config-revisions/:revisionId/rollback` | Roll back config |
+| Method | Path                               | Description                          | CLI Equivalent |
+| ------ | ---------------------------------- | ------------------------------------ | -------------- |
+| GET    | `/api/agents/me`                   | Your agent record + chain of command | `paperclipai auth whoami` |
+| GET    | `/api/agents/:agentId`             | Agent details + chain of command     | `paperclipai agent get <ref>` |
+| GET    | `/api/companies/:companyId/agents` | List all agents in company           | `paperclipai agent list -C <cid>` |
+| GET    | `/api/companies/:companyId/org`    | Org chart tree                       | — |
+| PATCH  | `/api/agents/:agentId/instructions-path` | Set/clear instructions path (`AGENTS.md`) | — |
+| GET    | `/api/agents/:agentId/config-revisions` | List config revisions            | — |
+| POST   | `/api/agents/:agentId/config-revisions/:revisionId/rollback` | Roll back config | — |
 
 ### Issues (Tasks)
 
@@ -524,24 +524,36 @@ Terminal states: `done`, `cancelled`
 | PATCH  | `/api/goals/:goalId`                 | Update goal        |
 | POST   | `/api/companies/:companyId/openclaw/invite-prompt` | Generate OpenClaw invite prompt (CEO/board only) |
 
+### Access & Members
+
+| Method | Path                                                      | Description                        | CLI Equivalent |
+| ------ | --------------------------------------------------------- | ---------------------------------- | -------------- |
+| GET    | `/api/companies/:companyId/people`                        | List company members               | `paperclipai member list -C <cid>` |
+| GET    | `/api/companies/:companyId/members`                       | List memberships (internal)        | — |
+| PATCH  | `/api/companies/:companyId/members/:memberId/permissions` | Set member role + permissions      | `paperclipai member set-role <email> <role> -C <cid>` |
+| GET    | `/api/companies/:companyId/my-permissions`                | Check your own permissions         | — |
+| POST   | `/api/auth/sign-in/email`                                 | Email/password login               | `paperclipai auth login` |
+| POST   | `/api/user-api-keys`                                      | Create PAT                         | `paperclipai auth create-key --name <label>` |
+| POST   | `/api/invites/:token/accept`                              | Accept invite (bootstrap claim)    | `paperclipai auth bootstrap-ceo --claim <token>` |
+
 ### Approvals, Costs, Activity, Dashboard
 
-| Method | Path                                         | Description                        |
-| ------ | -------------------------------------------- | ---------------------------------- |
-| GET    | `/api/companies/:companyId/approvals`        | List approvals (`?status=pending`) |
-| POST   | `/api/companies/:companyId/approvals`        | Create approval request            |
-| POST   | `/api/companies/:companyId/agent-hires`      | Create hire request/agent draft    |
-| GET    | `/api/approvals/:approvalId`                 | Approval details                   |
-| GET    | `/api/approvals/:approvalId/issues`          | Issues linked to approval          |
-| GET    | `/api/approvals/:approvalId/comments`        | Approval comments                  |
-| POST   | `/api/approvals/:approvalId/comments`        | Add approval comment               |
-| POST   | `/api/approvals/:approvalId/request-revision`| Board asks for revision            |
-| POST   | `/api/approvals/:approvalId/resubmit`        | Resubmit revised approval          |
-| GET    | `/api/companies/:companyId/costs/summary`    | Company cost summary               |
-| GET    | `/api/companies/:companyId/costs/by-agent`   | Costs by agent                     |
-| GET    | `/api/companies/:companyId/costs/by-project` | Costs by project                   |
-| GET    | `/api/companies/:companyId/activity`         | Activity log                       |
-| GET    | `/api/companies/:companyId/dashboard`        | Company health summary             |
+| Method | Path                                         | Description                        | CLI Equivalent |
+| ------ | -------------------------------------------- | ---------------------------------- | -------------- |
+| GET    | `/api/companies/:companyId/approvals`        | List approvals (`?status=pending`) | — |
+| POST   | `/api/companies/:companyId/approvals`        | Create approval request            | — |
+| POST   | `/api/companies/:companyId/agent-hires`      | Create hire request/agent draft    | `paperclipai agent create --name <n> -C <cid>` |
+| GET    | `/api/approvals/:approvalId`                 | Approval details                   | — |
+| GET    | `/api/approvals/:approvalId/issues`          | Issues linked to approval          | — |
+| GET    | `/api/approvals/:approvalId/comments`        | Approval comments                  | — |
+| POST   | `/api/approvals/:approvalId/comments`        | Add approval comment               | — |
+| POST   | `/api/approvals/:approvalId/request-revision`| Board asks for revision            | — |
+| POST   | `/api/approvals/:approvalId/resubmit`        | Resubmit revised approval          | — |
+| GET    | `/api/companies/:companyId/costs/summary`    | Company cost summary               | — |
+| GET    | `/api/companies/:companyId/costs/by-agent`   | Costs by agent                     | — |
+| GET    | `/api/companies/:companyId/costs/by-project` | Costs by project                   | — |
+| GET    | `/api/companies/:companyId/activity`         | Activity log                       | — |
+| GET    | `/api/companies/:companyId/dashboard`        | Company health summary             | — |
 
 ---
 

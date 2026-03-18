@@ -58,17 +58,48 @@ export function registerAuthClientCommands(auth: Command): void {
 
   // create-key
   addCommonClientOptions(
-    auth.command("create-key").description("Create a Personal Access Token (PAT)")
+    auth.command("create-key").description(
+      "Create a Personal Access Token (PAT).\n" +
+        "  Examples:\n" +
+        "    paperclipai auth create-key --name my-key                     # create + store in profile\n" +
+        "    paperclipai auth create-key --name ci-token --json            # JSON output for scripting",
+    )
       .requiredOption("--name <name>", "Name for the API key")
   ).action(async (opts: BaseClientOptions & { name: string }) => {
     try {
       const ctx = resolveCommandContext(opts);
       const result = await ctx.api.post<any>("/api/users/me/api-keys", { name: opts.name });
       upsertProfile(ctx.profileName, { apiKey: result.key }, opts.context);
-      if (ctx.json) { printOutput(result, { json: true }); return; }
+
+      // Best-effort membership check — warn if user has no company membership
+      let membershipWarning: string | null = null;
+      if (ctx.companyId) {
+        try {
+          const perms = await ctx.api.get<{ membershipRole: string | null; permissions: string[] }>(
+            `/api/companies/${ctx.companyId}/my-permissions`,
+          );
+          if (perms && perms.membershipRole === null) {
+            membershipWarning =
+              "You have no company membership. This key won't have permissions for " +
+              "agent management. Use `paperclipai member set-role` to fix.";
+          }
+        } catch {
+          // Permission check is best-effort — don't fail key creation
+        }
+      }
+
+      if (ctx.json) {
+        const output: Record<string, unknown> = { ...result };
+        if (membershipWarning) output.warning = membershipWarning;
+        printOutput(output, { json: true });
+        return;
+      }
       console.log(pc.green(`Created API key: ${result.key}`));
       console.log(pc.dim(`Key stored in profile '${ctx.profileName}'. This key will not be shown again.`));
       console.log(pc.yellow("⚠  Context file contains secrets — keep chmod 600 and do not commit to git."));
+      if (membershipWarning) {
+        console.log(pc.yellow(`⚠  Warning: ${membershipWarning}`));
+      }
     } catch (e) { handleCommandError(e); }
   });
 

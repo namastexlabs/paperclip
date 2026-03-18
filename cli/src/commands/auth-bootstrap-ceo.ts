@@ -5,6 +5,8 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { createDb, instanceUserRoles, invites } from "@paperclipai/db";
 import { loadPaperclipEnvFile } from "../config/env.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
+import { PaperclipApiClient } from "../client/http.js";
+import { readContext, resolveProfile } from "../client/context.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -129,5 +131,71 @@ export async function bootstrapCeoInvite(opts: {
     p.log.info("If using embedded-postgres, start the Paperclip server and run this command again.");
   } finally {
     await closableDb.$client?.end?.({ timeout: 5 }).catch(() => undefined);
+  }
+}
+
+export async function claimBootstrapInvite(opts: {
+  claim: string;
+  apiKey?: string;
+  apiBase?: string;
+  context?: string;
+  profile?: string;
+  json?: boolean;
+}) {
+  const token = opts.claim.trim();
+  if (!token) {
+    console.error(pc.red("Invite token is required with --claim."));
+    process.exit(1);
+  }
+
+  const context = readContext(opts.context);
+  const { profile } = resolveProfile(context, opts.profile);
+
+  const apiBase =
+    opts.apiBase?.trim() ||
+    process.env.PAPERCLIP_API_URL?.trim() ||
+    profile.apiBase ||
+    "http://localhost:3100";
+  const apiKey =
+    opts.apiKey?.trim() ||
+    process.env.PAPERCLIP_API_KEY?.trim() ||
+    profile.apiKey;
+  const sessionToken = profile.sessionToken;
+
+  if (!apiKey && !sessionToken) {
+    console.error(
+      pc.red(
+        "Authentication required. Provide --api-key <pat>, set PAPERCLIP_API_KEY, or run `paperclipai auth login` first.",
+      ),
+    );
+    process.exit(1);
+  }
+
+  const api = new PaperclipApiClient({ apiBase, apiKey, sessionToken });
+
+  try {
+    const result = await api.post<{
+      inviteId: string;
+      inviteType: string;
+      bootstrapAccepted: boolean;
+      userId: string;
+    }>(`/api/invites/${encodeURIComponent(token)}/accept`, {
+      requestType: "human",
+    });
+
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    console.log(pc.green("Promoted to instance admin."));
+    if (result?.userId) {
+      console.log(pc.dim(`User ID: ${result.userId}`));
+    }
+    console.log(pc.dim("Verify with: paperclipai auth whoami"));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(pc.red(`Failed to claim bootstrap invite: ${message}`));
+    process.exit(1);
   }
 }
