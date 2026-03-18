@@ -21,6 +21,26 @@ interface AgentListOptions extends BaseClientOptions {
   companyId?: string;
 }
 
+interface AgentCreateOptions extends BaseClientOptions {
+  companyId?: string;
+  name: string;
+  role?: string;
+  title?: string;
+  reportsTo?: string;
+  adapterType?: string;
+  adapterConfig?: string;
+  runtimeConfig?: string;
+  budget?: string;
+  cwd?: string;
+  model?: string;
+  instructionsFile?: string;
+}
+
+interface AgentHireResponse {
+  agent: Agent;
+  approval: { id: string; type: string; status: string } | null;
+}
+
 interface AgentLocalCliOptions extends BaseClientOptions {
   companyId?: string;
   keyName?: string;
@@ -213,6 +233,84 @@ export function registerAgentCommands(program: Command): void {
           handleCommandError(err);
         }
       }),
+  );
+
+  addCommonClientOptions(
+    agent
+      .command("create")
+      .description("Create a new agent via the hire flow")
+      .requiredOption("-C, --company-id <id>", "Company ID")
+      .requiredOption("--name <name>", "Agent name")
+      .option("--role <role>", "Agent role (ceo, cto, engineer, pm, qa, etc.)", "general")
+      .option("--title <title>", "Agent title / job description")
+      .option("--reports-to <agentId>", "UUID of the manager agent")
+      .option("--adapter-type <type>", "Adapter type (claude_local, codex_local, process, etc.)", "process")
+      .option("--adapter-config <json>", "Adapter config as JSON string")
+      .option("--runtime-config <json>", "Runtime config as JSON string")
+      .option("--budget <cents>", "Monthly budget in cents")
+      .option("--cwd <path>", "Shortcut: sets adapterConfig.cwd")
+      .option("--model <model>", "Shortcut: sets adapterConfig.model")
+      .option("--instructions-file <path>", "Shortcut: sets adapterConfig.instructionsFilePath")
+      .action(async (opts: AgentCreateOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts, { requireCompany: true });
+
+          const adapterConfig: Record<string, unknown> = opts.adapterConfig
+            ? JSON.parse(opts.adapterConfig)
+            : {};
+          if (opts.cwd) adapterConfig.cwd = opts.cwd;
+          if (opts.model) adapterConfig.model = opts.model;
+          if (opts.instructionsFile) adapterConfig.instructionsFilePath = opts.instructionsFile;
+
+          const runtimeConfig: Record<string, unknown> = opts.runtimeConfig
+            ? JSON.parse(opts.runtimeConfig)
+            : {};
+
+          const body: Record<string, unknown> = {
+            name: opts.name,
+            role: opts.role ?? "general",
+            adapterType: opts.adapterType ?? "process",
+            adapterConfig,
+            runtimeConfig,
+          };
+          if (opts.title) body.title = opts.title;
+          if (opts.reportsTo) body.reportsTo = opts.reportsTo;
+          if (opts.budget) body.budgetMonthlyCents = Number(opts.budget);
+
+          const result = await ctx.api.post<AgentHireResponse>(
+            `/api/companies/${ctx.companyId}/agent-hires`,
+            body,
+          );
+          if (!result) {
+            throw new Error("Failed to create agent");
+          }
+
+          if (ctx.json) {
+            printOutput(result, { json: true });
+            return;
+          }
+
+          const a = result.agent;
+          console.log(
+            formatInlineRecord({
+              id: a.id,
+              name: a.name,
+              urlKey: a.urlKey,
+              role: a.role,
+              status: a.status,
+              adapterType: a.adapterType,
+            }),
+          );
+          if (result.approval) {
+            console.log(
+              `Approval required: id=${result.approval.id} status=${result.approval.status}`,
+            );
+          }
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+    { includeCompany: false },
   );
 
   addCommonClientOptions(
